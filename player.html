@@ -141,6 +141,29 @@
     pointer-events: none;
   }
   #hint.gone { opacity: 0; }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(10,10,20,0.78);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 30px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 9px 20px;
+    z-index: 300;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+    white-space: nowrap;
+  }
+  #toast.show { opacity: 1; }
 </style>
 </head>
 <body>
@@ -157,13 +180,15 @@
   <button class="btn" id="next" title="Nächster Sender (→)">›</button>
   <select id="channel-select"></select>
   <button class="btn" id="mute-btn" title="Ton an/aus (M)">🔊</button>
+  <button class="btn" id="sub-btn" title="Untertitel an/aus (U)">UT</button>
   <button class="btn" onclick="window.location.href='index.html'" title="Übersicht">⌂</button>
 </div>
 
 <!-- muted + playsinline = garantiertes Autoplay -->
 <video id="video" muted playsinline></video>
 
-<div id="hint">↑ ↓ &nbsp;Sender wechseln &nbsp;·&nbsp; M Ton &nbsp;·&nbsp; F Vollbild</div>
+<div id="toast"></div>
+<div id="hint">↑ ↓ &nbsp;Sender wechseln &nbsp;·&nbsp; M Ton &nbsp;·&nbsp; U Untertitel &nbsp;·&nbsp; F Vollbild</div>
 
 <script>
 const params        = new URLSearchParams(window.location.search);
@@ -212,8 +237,12 @@ const names = [
   "Deluxe Music","Deluxe Dance","Deluxe Rap","Schlager Deluxe"
 ];
 
-let currentIndex = Math.max(sender.indexOf(initialStream), 0);
-let activeHls    = null;
+let currentIndex  = Math.max(sender.indexOf(initialStream), 0);
+let activeHls     = null;
+let subtitlesOn   = false;
+const subBtn      = document.getElementById("sub-btn");
+const toast       = document.getElementById("toast");
+let toastTimer;
 
 // Dropdown befüllen
 const select = document.getElementById("channel-select");
@@ -304,6 +333,40 @@ function zapTo(idx) {
   }
 }
 
+// ── Toast ──
+function showToast(msg) {
+  clearTimeout(toastTimer);
+  toast.textContent = msg;
+  toast.classList.add("show");
+  toastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
+}
+
+// ── Untertitel ──
+function toggleSubtitles() {
+  subtitlesOn = !subtitlesOn;
+
+  // hls.js
+  if (activeHls) {
+    if (subtitlesOn && activeHls.subtitleTracks.length > 0) {
+      activeHls.subtitleDisplay = true;
+      activeHls.subtitleTrack   = 0;
+    } else {
+      activeHls.subtitleDisplay = false;
+      activeHls.subtitleTrack   = -1;
+    }
+  }
+  // native TextTracks (Safari / WebKit)
+  for (const t of video.textTracks) {
+    t.mode = subtitlesOn ? "showing" : "disabled";
+  }
+
+  subBtn.style.opacity = subtitlesOn ? "1" : "0.45";
+  showToast(subtitlesOn ? "Untertitel ein" : "Untertitel aus");
+}
+
+subBtn.style.opacity = "0.45";
+subBtn.addEventListener("click", toggleSubtitles);
+
 // ── Topbar Auto-Hide ──
 let hideTimer;
 function revealTopbar() {
@@ -328,6 +391,8 @@ document.addEventListener("keydown", e => {
       muteBtn.textContent = video.muted ? "🔇" : "🔊";
       if (!video.muted) unmuteOverlay.classList.add("gone");
       break;
+    case "u": case "U":
+      toggleSubtitles(); break;
     case "f": case "F":
       if (!document.fullscreenElement) video.requestFullscreen().catch(() => {});
       else document.exitFullscreen();

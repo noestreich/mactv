@@ -153,6 +153,7 @@ struct SettingsView: View {
                 shortcutRow("1 – 9",     "Sender 1–9 direkt anwählen")
                 shortcutRow("0",         "Sender 10")
                 shortcutRow("M",         "Ton ein / aus")
+                shortcutRow("U",         "Untertitel ein / aus")
                 shortcutRow("F",         "Vollbild ein / aus")
             }
         }

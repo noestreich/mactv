@@ -9,9 +9,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var statusItem:      NSStatusItem!
     private var settingsWindow:  NSWindow?
     private var floatingItem:    NSMenuItem?
+    private var subtitleItem:    NSMenuItem?
     private var currentIndex     = 0
     private var pageReady        = false
     private var isFloating       = true
+    private var subtitlesOn      = false
 
     private let channelStore = ChannelStore()
     private let tvDir = URL(fileURLWithPath: "/Users/nicolasoestreich/tv")
@@ -59,7 +61,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     private func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "📺"
+        if let img = NSImage(systemSymbolName: "tv", accessibilityDescription: "MacTV") {
+            img.isTemplate = true
+            statusItem.button?.image = img
+        } else {
+            statusItem.button?.title = "📺"
+        }
         rebuildMenu()
     }
 
@@ -85,6 +92,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         fi.state  = isFloating ? .on : .off
         menu.addItem(fi)
         floatingItem = fi
+
+        let si = NSMenuItem(title: "Untertitel",
+                            action: #selector(toggleSubtitlesAction),
+                            keyEquivalent: "")
+        si.target = self
+        si.state  = subtitlesOn ? .on : .off
+        menu.addItem(si)
+        subtitleItem = si
 
         menu.addItem(.separator())
 
@@ -240,6 +255,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             NSApp.activate(ignoringOtherApps: true)
             panel.makeKeyAndOrderFront(nil)
         }
+    }
+
+    @objc private func toggleSubtitlesAction() {
+        subtitlesOn.toggle()
+        subtitleItem?.state = subtitlesOn ? .on : .off
+        webView.evaluateJavaScript("toggleSubtitles()") { _, _ in }
     }
 
     @objc private func toggleFloating() {
