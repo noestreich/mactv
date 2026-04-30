@@ -3,15 +3,16 @@ import AVFoundation
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
-    private var panel:        NSPanel!
-    private var playerLayer:  AVPlayerLayer!
-    private var player:       AVPlayer!
-    private var statusItem:   NSStatusItem!
-    private var currentIndex  = 0
+    private var panel:       NSPanel!
+    private var playerLayer: AVPlayerLayer!
+    private var player:      AVPlayer!
+    private var statusItem:  NSStatusItem!
+    private var currentIndex = 0
 
     // MARK: - Launch
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.activate(ignoringOtherApps: true)
         setupMenuBar()
         createPanel()
         tune(to: 0)
@@ -24,12 +25,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusItem.button?.title = "📺"
 
         let menu = NSMenu()
-        menu.addItem(withTitle: "Einblenden / Ausblenden",
-                     action: #selector(togglePanel), keyEquivalent: "")
-            .target = self
+        let show = NSMenuItem(title: "Einblenden / Ausblenden",
+                              action: #selector(togglePanel), keyEquivalent: "")
+        show.target = self
+        menu.addItem(show)
         menu.addItem(.separator())
 
-        // Schnellzugriff erste 9 Sender
         for (i, ch) in allChannels.prefix(9).enumerated() {
             let item = NSMenuItem(title: "\(i + 1)  \(ch.name)",
                                   action: #selector(menuTune(_:)),
@@ -45,55 +46,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                               keyEquivalent: "q")
         quit.target = NSApp
         menu.addItem(quit)
-
         statusItem.menu = menu
     }
 
     // MARK: - Floating Panel
 
     private func createPanel() {
-        let rect = NSRect(x: 0, y: 0, width: 480, height: 270)
+        let w: CGFloat = 480
+        let h: CGFloat = 270
 
         panel = NSPanel(
-            contentRect: rect,
-            styleMask:   [.titled, .closable, .resizable, .hudWindow],
+            contentRect: NSRect(x: 0, y: 0, width: w, height: h),
+            styleMask:   [.titled, .closable, .resizable],
             backing:     .buffered,
             defer:       false
         )
+        panel.title              = "TVFloat"
         panel.level              = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isMovableByWindowBackground = true
+        panel.appearance         = NSAppearance(named: .darkAqua)
+        panel.backgroundColor    = .black
         panel.delegate           = self
 
-        // Explizit auf Hauptbildschirm zentrieren
-        if let screen = NSScreen.main {
-            let sf = screen.visibleFrame
-            let origin = NSPoint(
-                x: sf.minX + (sf.width  - rect.width)  / 2,
-                y: sf.minY + (sf.height - rect.height) / 2
-            )
-            panel.setFrameOrigin(origin)
-        }
+        // Bildschirmmitte
+        let screen = NSScreen.main ?? NSScreen.screens[0]
+        let sf = screen.visibleFrame
+        panel.setFrameOrigin(NSPoint(
+            x: sf.minX + (sf.width  - w) / 2,
+            y: sf.minY + (sf.height - h) / 2
+        ))
 
-        // AVPlayerLayer direkt ins contentView – zuverlässiger als AVPlayerView
+        // AVPlayerLayer direkt auf contentView
         player = AVPlayer()
-
         let cv = panel.contentView!
         cv.wantsLayer = true
         cv.layer?.backgroundColor = NSColor.black.cgColor
 
         playerLayer = AVPlayerLayer(player: player)
-        playerLayer.frame             = cv.bounds
-        playerLayer.autoresizingMask  = [.layerWidthSizable, .layerHeightSizable]
-        playerLayer.videoGravity      = .resizeAspect
+        playerLayer.frame            = cv.bounds
+        playerLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+        playerLayer.videoGravity     = .resizeAspect
         cv.layer?.addSublayer(playerLayer)
 
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             self?.handleKey(event) ?? event
         }
 
-        panel.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        // orderFrontRegardless bringt das Fenster ohne Aktivierung nach vorne
+        panel.orderFrontRegardless()
     }
 
     // MARK: - Sender wechseln
@@ -108,46 +109,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     // MARK: - Tastatur
-    // ↑/→  nächster Sender    ↓/←  vorheriger
-    // 1–9  direkter Sprung     0    Sender 10
-    // M    Ton an/aus          F    Vollbild
+    // ↑ / →   nächster Sender
+    // ↓ / ←   vorheriger Sender
+    // 1–9     Direktwahl
+    // 0       Sender 10
+    // M       Ton an/aus
+    // F       Vollbild
 
     private func handleKey(_ event: NSEvent) -> NSEvent? {
         if let special = event.specialKey {
             switch special {
-            case .upArrow, .rightArrow:   tune(to: currentIndex + 1); return nil
-            case .downArrow, .leftArrow:  tune(to: currentIndex - 1); return nil
+            case .upArrow, .rightArrow:  tune(to: currentIndex + 1); return nil
+            case .downArrow, .leftArrow: tune(to: currentIndex - 1); return nil
             default: break
             }
         }
-
         guard let ch = event.characters?.lowercased() else { return event }
         switch ch {
-        case "1"..."9":
-            tune(to: (Int(ch) ?? 1) - 1);        return nil
-        case "0":
-            tune(to: 9);                          return nil
-        case "m":
-            player.isMuted.toggle();              return nil
-        case "f":
-            panel.toggleFullScreen(nil); return nil
-        default:
-            return event
+        case "1"..."9": tune(to: (Int(ch) ?? 1) - 1); return nil
+        case "0":       tune(to: 9);                  return nil
+        case "m":       player.isMuted.toggle();       return nil
+        case "f":       panel.toggleFullScreen(nil);   return nil
+        default:        return event
         }
     }
 
     // MARK: - Actions
 
     @objc private func togglePanel() {
-        panel.isVisible ? panel.orderOut(nil) : panel.makeKeyAndOrderFront(nil)
+        if panel.isVisible { panel.orderOut(nil) }
+        else               { panel.orderFrontRegardless() }
     }
 
     @objc private func menuTune(_ sender: NSMenuItem) {
         tune(to: sender.tag)
-        if !panel.isVisible { panel.makeKeyAndOrderFront(nil) }
+        if !panel.isVisible { panel.orderFrontRegardless() }
     }
 
-    // Panel schließen → nur ausblenden, App läuft weiter
+    // Schließen → ausblenden statt beenden
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         panel.orderOut(nil)
         return false
