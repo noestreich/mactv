@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MacTV</title>
+<style>
+  :root {
+    --bg:        #0a0a0f;
+    --card:      #13131d;
+    --card-h:    #1a1a28;
+    --accent:    #7c6cff;
+    --text:      #ddddf0;
+    --sub:       #6060888;
+    --radius:    14px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 32px 20px 4px;
+    text-align: center;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #4040608;
+    background: linear-gradient(135deg, #7c6cff, #b06cff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #50507a;
+    text-align: center;
+    padding: 28px 0 6px;
+  }
+
+  .grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    padding: 8px 16px;
+    max-width: 1020px;
+    margin: 0 auto;
+  }
+
+  .channel a {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 148px;
+    height: 148px;
+    background: var(--card);
+    border-radius: var(--radius);
+    color: var(--text);
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid rgba(255,255,255,0.04);
+    transition: background 0.18s, transform 0.18s, box-shadow 0.18s, border-color 0.18s;
+    color: #9090b8;
+  }
+  .channel a:hover {
+    background: var(--card-h);
+    transform: translateY(-4px);
+    box-shadow: 0 10px 28px rgba(124,108,255,0.22);
+    border-color: rgba(124,108,255,0.35);
+    color: var(--text);
+  }
+  .channel img {
+    width: 68px;
+    height: 68px;
+    object-fit: contain;
+    transition: transform 0.18s;
+  }
+  .channel a:hover img { transform: scale(1.08); }
+  .rotate { transform: rotate(90deg); }
+  .channel a:hover .rotate { transform: rotate(90deg) scale(1.08); }
+
+  /* Collapsible sections */
+  .section-block {
+    max-width: 1020px;
+    margin: 6px auto;
+    padding: 0 16px;
+  }
+  details {
+    background: var(--card);
+    border-radius: var(--radius);
+    border: 1px solid rgba(255,255,255,0.04);
+    overflow: hidden;
+  }
+  details > summary {
+    padding: 14px 18px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #50507a;
+    cursor: pointer;
+    outline: none;
+    list-style: none;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::after {
+    content: "›";
+    font-size: 20px;
+    font-weight: 300;
+    transition: transform 0.2s;
+  }
+  details[open] > summary::after { transform: rotate(90deg); }
+  details > summary:hover { color: #8080aa; }
+
+  footer {
+    padding: 40px 0 20px;
+    text-align: center;
+    font-size: 11px;
+    color: #30304a;
+  }
+
+  @media (max-width: 600px) {
+    .channel a { width: 44vw; height: 44vw; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>MacTV</h1>
+</header>
+
+<!-- TOP SENDER -->
+<p class="section-label">Top Sender</p>
+<div class="grid">
+
+  <div class="channel">
+    <a href="player.html?stream=https://daserste-live.ard-mcdn.de/daserste/live/hls/de/master.m3u8">
+      <img src="https://upload.wikimedia.org/wikipedia/commons/c/ca/Das_Erste_2014.svg" alt="Das Erste">
+      Das Erste
+    </a>
+  </div>
+
+  <div class="channel">
+    <a href="player.html?stream=https://zdf-hls-18.akamaized.net/hls/live/2016501/de/high/master.m3u8">
+      <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/ZDF_logo.svg" alt="ZDF">
+      ZDF
+    </a>
+  </div>
+
+  <div class="channel">
+    <a href="player.html?stream=https://rbb-hls-berlin.akamaized.net/hls/live/2017824/rbb_berlin/master.m3u8">
+      <img src="https://upload.wikimedia.org/wikipedia/commons/e/ec/Rbb_Fernsehen_Logo_2017.08.svg" alt="RBB Berlin">
+      RBB Berlin
+    </a>
+  </div>
+
+  <div class="channel">
+    <a href="player.html?stream=https://artesimulcast.akamaized.net/hls/live/2030993/artelive_de/index.m3u8">
+      <img class="rotate" src="https://upload.wikimedia.org/wikipedia/commons/4/43/Arte_Logo_2017.svg" alt="ARTE">
+      Arte
+    </a>
+  </div>
+
+  <div class="channel">
+    <a href="player.html?stream=https://mcdn-one.ard.de/ardone/hls/master.m3u8">
+      <img src="https://upload.wikimedia.org/wikipedia/commons/3/3d/One_2022.svg" alt="ONE">
+      One
+    </a>
+  </div>
+
+  <div class="channel">
+    <a href="player.html?stream=https://w-live2weltcms.akamaized.net/hls/live/2041019/Welt-LivePGM/index.m3u8">
+      <img src="https://upload.wikimedia.org/wikipedia/commons/3/3b/Welt_TV_Logo_2016.svg" alt="Welt">
+      Welt
+    </a>
+  </div>
+
+  <div class="channel">
+    <a href="player.html?stream=https://zdf-hls-16.akamaized.net/hls/live/2016499/de/veryhigh/master.m3u8">
+      <img src="https://upload.wikimedia.org/wikipedia/commons/8/8c/ZDFneo2017_Logo.svg" alt="ZDFneo">
+      ZDFneo
+    </a>
+  </div>
+
+  <div class="channel">
+    <a href="player.html?stream=https://zdf-hls-17.akamaized.net/hls/live/2016500/de/veryhigh/master.m3u8">
+      <img src="https://upload.wikimedia.org/wikipedia/commons/3/34/ZDFinfo_2011.svg" alt="ZDFinfo">
+      ZDFinfo
+    </a>
+  </div>
+
+  <div class="channel">
+    <a href="player.html?stream=https://wdrfs247.akamaized.net/hls/live/681509/wdr_msl4_fs247/index.m3u8">
+      <img src="https://upload.wikimedia.org/wikipedia/commons/b/b3/Wdr_fernsehen_logo_2016.svg" alt="WDR">
+      WDR
+    </a>
+  </div>
+
+  <div class="channel">
+    <a href="player.html?stream=https://zdf-hls-19.akamaized.net/hls/live/2016502/de/veryhigh/master.m3u8">
+      <img src="https://upload.wikimedia.org/wikipedia/commons/4/43/Phoenix-logo-2018.svg" alt="Phoenix">
+      Phoenix
+    </a>
+  </div>
+
+</div>
+
+<!-- WEITERE ÖR -->
+<div class="section-block">
+  <details>
+    <summary>Weitere öffentlich-rechtliche Sender</summary>
+    <div class="grid">
+
+      <div class="channel">
+        <a href="player.html?stream=https://zdf-hls-18.akamaized.net/hls/live/2016501/dach/veryhigh/master.m3u8">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/8/81/3sat_2019.svg" alt="3sat">
+          3sat
+        </a>
+      </div>
+
+      <div class="channel">
+        <a href="player.html?stream=https://mcdn.br.de/br/fs/ard_alpha/hls/de/master.m3u8">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/4/4b/ARD_alpha.svg" alt="ARD Alpha">
+          ARD Alpha
+        </a>
+      </div>
+
+      <div class="channel">
+        <a href="player.html?stream=https://kikageohls.akamaized.net/hls/live/2022693/livetvkika_de/master.m3u8">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/f/f5/Kika_2012.svg" alt="KiKA">
+          KiKA
+        </a>
+      </div>
+
+    </div>
+  </details>
+</div>
+
+<!-- NACHRICHTEN -->
+<div class="section-block">
+  <details>
+    <summary>Nachrichten und Info</summary>
+    <div class="grid">
+
+      <div class="channel">
+        <a href="player.html?stream=https://tagesschau.akamaized.net/hls/live/2020115/tagesschau/tagesschau_1/master.m3u8">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/2/24/Tagesschau24-2012.svg" alt="Tagesschau24">
+          Tagesschau24
+        </a>
+      </div>
+
+      <div class="channel">
+        <a href="https://www.youtube.com/euronewsde/live">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/9/9c/Euronews_2022.svg" alt="Euronews DE">
+          Euronews DE
+        </a>
+      </div>
+
+    </div>
+  </details>
+</div>
+
+<!-- REGIONAL -->
+<div class="section-block">
+  <details>
+    <summary>Regionale Programme</summary>
+    <div class="grid">
+
+      <div class="channel">
+        <a href="player.html?stream=https://brcdn.vo.llnwd.net/br/fs/bfs_sued/hls/de/master.m3u8">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/9/9b/Logo_BR_Fernsehen_2021.svg" alt="BR Fernsehen">
+          BR Fernsehen
+        </a>
+      </div>
+
+      <div class="channel">
+        <a href="player.html?stream=https://hrhls.akamaized.net/hls/live/2024525/hrhls/master.m3u8">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/e/ea/HR-Fernsehen_Logo_2023.svg" alt="HR Fernsehen">
+          HR Fernsehen
+        </a>
+      </div>
+
+      <div class="channel">
+        <a href="player.html?stream=https://mdrtvsnhls.akamaized.net/hls/live/2016928/mdrtvsn/master.m3u8">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/6/61/MDR_Logo_2017.svg" alt="MDR Sachsen">
+          MDR Sachsen
+        </a>
+      </div>
+
+      <div class="channel">
+        <a href="player.html?stream=https://mcdn.ndr.de/ndr/hls/ndr_fs/ndr_nds/master.m3u8">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/e/e9/Logo_NDR_Fernsehen_2017.svg" alt="NDR NDS">
+          NDR NDS
+        </a>
+      </div>
+
+      <div class="channel">
+        <a href="player.html?stream=https://rbhlslive.akamaized.net/hls/live/2020435/rbfs/master.m3u8">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/3/39/Logo_Radio_Bremen.svg" alt="Radio Bremen TV">
+          Radio Bremen TV
+        </a>
+      </div>
+
+      <div class="channel">
+        <a href="player.html?stream=https://srfs.akamaized.net/hls/live/689649/srfsgeo/index.m3u8">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/9/9c/SR_Fernsehen_Logo_2023.svg" alt="SR Fernsehen">
+          SR Fernsehen
+        </a>
+      </div>
+
+      <div class="channel">
+        <a href="player.html?stream=https://swrbwd-hls.akamaized.net/hls/live/2018672/swrbwd/master.m3u8">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/2/26/SWR_Logo_2023.svg" alt="SWR BW">
+          SWR BW
+        </a>
+      </div>
+
+      <div class="channel">
+        <a href="player.html?stream=https://ndrint.akamaized.net/hls/live/2020766/ndr_int/index.m3u8">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/e/e9/Logo_NDR_Fernsehen_2017.svg" alt="NDR International">
+          NDR International
+        </a>
+      </div>
+
+    </div>
+  </details>
+</div>
+
+<!-- MUSIK & ENTERTAINMENT -->
+<div class="section-block">
+  <details>
+    <summary>Musik und Entertainment</summary>
+    <div class="grid">
+
+      <div class="channel">
+        <a href="player.html?stream=https://sdn-global-live-streaming-packager-cache.3qsdn.com/13456/13456_264_live.m3u8">
+          <img src="https://i.imgur.com/E65GQN9.png" alt="Deluxe Music">
+          Deluxe Music
+        </a>
+      </div>
+
+      <div class="channel">
+        <a href="player.html?stream=https://sdn-global-live-streaming-packager-cache.3qsdn.com/64733/64733_264_live.m3u8">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/c/c2/Deluxe_Dance_by_Kontor_Logo_2023.svg" alt="Deluxe Dance">
+          Deluxe Dance
+        </a>
+      </div>
+
+      <div class="channel">
+        <a href="player.html?stream=https://sdn-global-live-streaming-packager-cache.3qsdn.com/65183/65183_264_live.m3u8">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/0/07/Deluxe_Rap_Logo_2023.svg" alt="Deluxe Rap">
+          Deluxe Rap
+        </a>
+      </div>
+
+      <div class="channel">
+        <a href="player.html?stream=https://sdn-global-live-streaming-packager-cache.3qsdn.com/26658/26658_264_live.m3u8">
+          <img src="https://i.imgur.com/YPpgUOg.png" alt="Schlager Deluxe">
+          Schlager Deluxe
+        </a>
+      </div>
+
+    </div>
+  </details>
+</div>
+
+<footer>MacTV &nbsp;·&nbsp; ↑↓ oder Ziffern zum Zappen im Player</footer>
+
+</body>
+</html>

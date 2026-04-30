@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MacTV Player</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body { background: #000; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+
+  video {
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+    display: block;
+  }
+
+  /* ── Spinner ── */
+  #spinner {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    z-index: 50;
+    transition: opacity 0.4s;
+  }
+  #spinner.gone { opacity: 0; pointer-events: none; }
+  .spin-ring {
+    width: 44px;
+    height: 44px;
+    border: 3px solid rgba(255,255,255,0.1);
+    border-top-color: rgba(255,255,255,0.65);
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Unmute overlay ── */
+  #unmute-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 60;
+    cursor: pointer;
+  }
+  #unmute-overlay.gone { display: none; }
+  #unmute-pill {
+    background: rgba(10,10,20,0.72);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 40px;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 500;
+    padding: 13px 24px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    animation: fadeIn 0.25s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: scale(1); } }
+
+  /* ── Topbar ── */
+  #topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 16px 30px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, transparent 100%);
+    z-index: 40;
+    opacity: 1;
+    transition: opacity 0.35s;
+  }
+  #topbar.hidden { opacity: 0; pointer-events: none; }
+
+  #channel-name {
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .btn {
+    width: 36px;
+    height: 36px;
+    font-size: 17px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.14);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .btn:hover { background: rgba(255,255,255,0.26); }
+  .btn:active { background: rgba(255,255,255,0.38); }
+
+  #channel-select {
+    background: rgba(255,255,255,0.12);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #fff;
+    border: none;
+    padding: 6px 10px;
+    font-size: 13px;
+    border-radius: 8px;
+    cursor: pointer;
+    max-width: 140px;
+  }
+  #channel-select option { background: #1a1a2e; color: #fff; }
+
+  /* ── Keyboard hint (bottom-right, fades out) ── */
+  #hint {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    color: rgba(255,255,255,0.35);
+    font-size: 11px;
+    z-index: 40;
+    text-align: right;
+    line-height: 1.6;
+    transition: opacity 0.5s;
+    pointer-events: none;
+  }
+  #hint.gone { opacity: 0; }
+</style>
+</head>
+<body>
+
+<div id="spinner"><div class="spin-ring"></div></div>
+
+<div id="unmute-overlay" class="gone">
+  <div id="unmute-pill">🔇 Klicken für Ton</div>
+</div>
+
+<div id="topbar">
+  <span id="channel-name">Lädt…</span>
+  <button class="btn" id="prev" title="Vorheriger Sender (←)">‹</button>
+  <button class="btn" id="next" title="Nächster Sender (→)">›</button>
+  <select id="channel-select"></select>
+  <button class="btn" id="mute-btn" title="Ton an/aus (M)">🔊</button>
+  <button class="btn" onclick="window.location.href='index.html'" title="Übersicht">⌂</button>
+</div>
+
+<!-- muted + playsinline = garantiertes Autoplay -->
+<video id="video" muted playsinline></video>
+
+<div id="hint">↑ ↓ &nbsp;Sender wechseln &nbsp;·&nbsp; M Ton &nbsp;·&nbsp; F Vollbild</div>
+
+<script>
+const params        = new URLSearchParams(window.location.search);
+const initialStream = params.get("stream");
+const video         = document.getElementById("video");
+const topbar        = document.getElementById("topbar");
+const spinner       = document.getElementById("spinner");
+const unmuteOverlay = document.getElementById("unmute-overlay");
+const muteBtn       = document.getElementById("mute-btn");
+const hint          = document.getElementById("hint");
+
+const sender = [
+  "https://daserste-live.ard-mcdn.de/daserste/live/hls/de/master.m3u8",
+  "https://zdf-hls-18.akamaized.net/hls/live/2016501/de/high/master.m3u8",
+  "https://rbb-hls-berlin.akamaized.net/hls/live/2017824/rbb_berlin/master.m3u8",
+  "https://artesimulcast.akamaized.net/hls/live/2030993/artelive_de/index.m3u8",
+  "https://mcdn-one.ard.de/ardone/hls/master.m3u8",
+  "https://w-live2weltcms.akamaized.net/hls/live/2041019/Welt-LivePGM/index.m3u8",
+  "https://zdf-hls-16.akamaized.net/hls/live/2016499/de/veryhigh/master.m3u8",
+  "https://zdf-hls-17.akamaized.net/hls/live/2016500/de/veryhigh/master.m3u8",
+  "https://wdrfs247.akamaized.net/hls/live/681509/wdr_msl4_fs247/index.m3u8",
+  "https://zdf-hls-19.akamaized.net/hls/live/2016502/de/veryhigh/master.m3u8",
+  "https://zdf-hls-18.akamaized.net/hls/live/2016501/dach/veryhigh/master.m3u8",
+  "https://mcdn.br.de/br/fs/ard_alpha/hls/de/master.m3u8",
+  "https://kikageohls.akamaized.net/hls/live/2022693/livetvkika_de/master.m3u8",
+  "https://tagesschau.akamaized.net/hls/live/2020115/tagesschau/tagesschau_1/master.m3u8",
+  "https://brcdn.vo.llnwd.net/br/fs/bfs_sued/hls/de/master.m3u8",
+  "https://hrhls.akamaized.net/hls/live/2024525/hrhls/master.m3u8",
+  "https://mdrtvsnhls.akamaized.net/hls/live/2016928/mdrtvsn/master.m3u8",
+  "https://mcdn.ndr.de/ndr/hls/ndr_fs/ndr_nds/master.m3u8",
+  "https://rbhlslive.akamaized.net/hls/live/2020435/rbfs/master.m3u8",
+  "https://srfs.akamaized.net/hls/live/689649/srfsgeo/index.m3u8",
+  "https://swrbwd-hls.akamaized.net/hls/live/2018672/swrbwd/master.m3u8",
+  "https://ndrint.akamaized.net/hls/live/2020766/ndr_int/index.m3u8",
+  "https://sdn-global-live-streaming-packager-cache.3qsdn.com/13456/13456_264_live.m3u8",
+  "https://sdn-global-live-streaming-packager-cache.3qsdn.com/64733/64733_264_live.m3u8",
+  "https://sdn-global-live-streaming-packager-cache.3qsdn.com/65183/65183_264_live.m3u8",
+  "https://sdn-global-live-streaming-packager-cache.3qsdn.com/26658/26658_264_live.m3u8"
+];
+
+const names = [
+  "Das Erste","ZDF","RBB Berlin","Arte","One","Welt","ZDFneo","ZDFinfo","WDR","Phoenix",
+  "3sat","ARD Alpha","KiKA","Tagesschau24",
+  "BR Fernsehen","HR Fernsehen","MDR Sachsen","NDR NDS","Radio Bremen TV",
+  "SR Fernsehen","SWR BW","NDR International",
+  "Deluxe Music","Deluxe Dance","Deluxe Rap","Schlager Deluxe"
+];
+
+let currentIndex = Math.max(sender.indexOf(initialStream), 0);
+let activeHls    = null;
+
+// Dropdown befüllen
+const select = document.getElementById("channel-select");
+names.forEach((name, idx) => {
+  const opt = document.createElement("option");
+  opt.value = idx;
+  opt.textContent = name;
+  if (idx === currentIndex) opt.selected = true;
+  select.appendChild(opt);
+});
+select.onchange = () => zapTo(parseInt(select.value, 10));
+
+document.getElementById("prev").onclick = () => zapTo(currentIndex - 1);
+document.getElementById("next").onclick = () => zapTo(currentIndex + 1);
+
+// ── Autoplay-Fix: immer muted starten, dann unmuten versuchen ──
+function onPlaybackStarted() {
+  spinner.classList.add("gone");
+  // Versuche lautlos abzuspielen und dann Ton zu aktivieren
+  video.muted = false;
+  if (video.muted) {
+    // Browser hat Unmute blockiert → Overlay zeigen
+    showUnmute();
+  } else {
+    muteBtn.textContent = "🔊";
+  }
+}
+
+function showUnmute() {
+  unmuteOverlay.classList.remove("gone");
+  muteBtn.textContent = "🔇";
+}
+
+unmuteOverlay.addEventListener("click", () => {
+  video.muted = false;
+  unmuteOverlay.classList.add("gone");
+  muteBtn.textContent = "🔊";
+});
+
+muteBtn.addEventListener("click", () => {
+  video.muted = !video.muted;
+  muteBtn.textContent = video.muted ? "🔇" : "🔊";
+  if (!video.muted) unmuteOverlay.classList.add("gone");
+});
+
+// ── HLS Player ──
+function playUrl(url) {
+  if (activeHls) { activeHls.destroy(); activeHls = null; }
+  spinner.classList.remove("gone");
+  unmuteOverlay.classList.add("gone");
+  video.muted = true; // sicherstellen für Autoplay
+
+  if (Hls.isSupported()) {
+    const hls = new Hls({ lowLatencyMode: true });
+    activeHls = hls;
+    hls.loadSource(url);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      video.play()
+        .then(onPlaybackStarted)
+        .catch(() => spinner.classList.add("gone"));
+    });
+    hls.on(Hls.Events.ERROR, (_, data) => {
+      if (data.fatal) spinner.classList.add("gone");
+    });
+  } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    video.src = url;
+    video.addEventListener("canplay", onPlaybackStarted, { once: true });
+    video.play().catch(() => spinner.classList.add("gone"));
+  } else {
+    spinner.classList.add("gone");
+    alert("HLS wird auf diesem Gerät nicht unterstützt.");
+  }
+}
+
+// ── Zapping (ohne Seitenreload) ──
+function zapTo(idx) {
+  idx = ((idx % sender.length) + sender.length) % sender.length;
+  currentIndex = idx;
+  document.getElementById("channel-name").textContent = names[idx];
+  document.title = names[idx] + " · MacTV";
+  select.value = idx;
+  history.replaceState(null, "", "player.html?stream=" + encodeURIComponent(sender[idx]));
+  playUrl(sender[idx]);
+}
+
+// ── Topbar Auto-Hide ──
+let hideTimer;
+function revealTopbar() {
+  topbar.classList.remove("hidden");
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(() => topbar.classList.add("hidden"), 3200);
+}
+document.addEventListener("mousemove", revealTopbar);
+revealTopbar();
+
+// ── Keyboard-Shortcuts ──
+document.addEventListener("keydown", e => {
+  switch (e.key) {
+    case "ArrowUp":
+    case "ArrowRight":
+      e.preventDefault(); zapTo(currentIndex + 1); break;
+    case "ArrowDown":
+    case "ArrowLeft":
+      e.preventDefault(); zapTo(currentIndex - 1); break;
+    case "m": case "M":
+      video.muted = !video.muted;
+      muteBtn.textContent = video.muted ? "🔇" : "🔊";
+      if (!video.muted) unmuteOverlay.classList.add("gone");
+      break;
+    case "f": case "F":
+      if (!document.fullscreenElement) video.requestFullscreen().catch(() => {});
+      else document.exitFullscreen();
+      break;
+    default:
+      if (e.key >= "1" && e.key <= "9") zapTo(parseInt(e.key) - 1);
+      else if (e.key === "0") zapTo(9);
+  }
+});
+
+// ── Hint ausblenden ──
+setTimeout(() => hint.classList.add("gone"), 5000);
+
+// ── Start ──
+document.getElementById("channel-name").textContent = names[currentIndex] || "Sender";
+document.title = (names[currentIndex] || "Sender") + " · MacTV";
+playUrl(initialStream || sender[currentIndex]);
+</script>
+
+</body>
+</html>
