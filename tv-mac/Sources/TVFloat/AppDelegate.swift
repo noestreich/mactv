@@ -1,13 +1,15 @@
 import AppKit
-import AVFoundation
+import WebKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate {
 
     private var panel:       NSPanel!
-    private var playerLayer: AVPlayerLayer!
-    private var player:      AVPlayer!
+    private var webView:     WKWebView!
     private var statusItem:  NSStatusItem!
     private var currentIndex = 0
+    private var pageReady    = false
+
+    private let tvDir = URL(fileURLWithPath: "/Users/nicolasoestreich/tv")
 
     // MARK: - Launch
 
@@ -15,10 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         setupMenuBar()
         createPanel()
-        tune(to: 0)
     }
 
-    // MARK: - Menu-Bar icon
+    // MARK: - Menu-Bar
 
     private func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -49,11 +50,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusItem.menu = menu
     }
 
-    // MARK: - Floating Panel
+    // MARK: - Fenster + WebView
 
     private func createPanel() {
-        let w: CGFloat = 480
-        let h: CGFloat = 270
+        let w: CGFloat = 640
+        let h: CGFloat = 390
 
         panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: w, height: h),
@@ -69,69 +70,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.backgroundColor    = .black
         panel.delegate           = self
 
-        // Bildschirmmitte
-        let screen = NSScreen.main ?? NSScreen.screens[0]
-        let sf = screen.visibleFrame
+        // Mitte des Hauptbildschirms
+        let sf = (NSScreen.main ?? NSScreen.screens[0]).visibleFrame
         panel.setFrameOrigin(NSPoint(
             x: sf.minX + (sf.width  - w) / 2,
             y: sf.minY + (sf.height - h) / 2
         ))
 
-        // AVPlayerLayer direkt auf contentView
-        player = AVPlayer()
-        let cv = panel.contentView!
-        cv.wantsLayer = true
-        cv.layer?.backgroundColor = NSColor.black.cgColor
+        // WKWebView – Autoplay ohne User-Interaktion erlauben
+        let config = WKWebViewConfiguration()
+        config.mediaTypesRequiringUserActionForPlayback = []
 
-        playerLayer = AVPlayerLayer(player: player)
-        playerLayer.frame            = cv.bounds
-        playerLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
-        playerLayer.videoGravity     = .resizeAspect
-        cv.layer?.addSublayer(playerLayer)
+        webView = WKWebView(
+            frame: NSRect(origin: .zero, size: NSSize(width: w, height: h)),
+            configuration: config
+        )
+        webView.autoresizingMask   = [.width, .height]
+        webView.navigationDelegate = self
 
-        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            self?.handleKey(event) ?? event
-        }
-
-        // orderFrontRegardless bringt das Fenster ohne Aktivierung nach vorne
+        panel.contentView?.addSubview(webView)
         panel.orderFrontRegardless()
+
+        loadChannel(0)
     }
 
-    // MARK: - Sender wechseln
+    // MARK: - Sender laden
 
-    func tune(to index: Int) {
+    func loadChannel(_ index: Int) {
         currentIndex = ((index % allChannels.count) + allChannels.count) % allChannels.count
         let ch = allChannels[currentIndex]
-        guard let url = URL(string: ch.url) else { return }
-        player.replaceCurrentItem(with: AVPlayerItem(url: url))
-        player.play()
         panel.title = "\(currentIndex + 1)  \(ch.name)"
-    }
 
-    // MARK: - Tastatur
-    // ↑ / →   nächster Sender
-    // ↓ / ←   vorheriger Sender
-    // 1–9     Direktwahl
-    // 0       Sender 10
-    // M       Ton an/aus
-    // F       Vollbild
-
-    private func handleKey(_ event: NSEvent) -> NSEvent? {
-        if let special = event.specialKey {
-            switch special {
-            case .upArrow, .rightArrow:  tune(to: currentIndex + 1); return nil
-            case .downArrow, .leftArrow: tune(to: currentIndex - 1); return nil
-            default: break
+        if pageReady {
+            // Seite bereits geladen → Stream via JavaScript wechseln (kein Reload)
+            webView.evaluateJavaScript("zapTo(\(currentIndex))") { _, _ in }
+        } else {
+            // Erstmalig laden
+            let playerFile = tvDir.appendingPathComponent("player.html")
+            var comps = URLComponents(url: playerFile, resolvingAgainstBaseURL: false)!
+            comps.queryItems = [URLQueryItem(name: "stream", value: ch.url)]
+            if let url = comps.url {
+                webView.loadFileURL(url, allowingReadAccessTo: tvDir)
             }
         }
-        guard let ch = event.characters?.lowercased() else { return event }
-        switch ch {
-        case "1"..."9": tune(to: (Int(ch) ?? 1) - 1); return nil
-        case "0":       tune(to: 9);                  return nil
-        case "m":       player.isMuted.toggle();       return nil
-        case "f":       panel.toggleFullScreen(nil);   return nil
-        default:        return event
-        }
+    }
+
+    // Sobald player.html fertig geladen ist
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        pageReady = true
     }
 
     // MARK: - Actions
@@ -142,11 +128,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func menuTune(_ sender: NSMenuItem) {
-        tune(to: sender.tag)
+        loadChannel(sender.tag)
         if !panel.isVisible { panel.orderFrontRegardless() }
     }
 
-    // Schließen → ausblenden statt beenden
+    // Schließen → nur ausblenden
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         panel.orderOut(nil)
         return false
