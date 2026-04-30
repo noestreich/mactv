@@ -16,7 +16,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var subtitlesOn      = false
 
     private let channelStore = ChannelStore()
-    private let tvDir = URL(fileURLWithPath: "/Users/nicolasoestreich/tv")
 
     // MARK: - Launch
 
@@ -169,8 +168,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     private func loadPlayerPage() {
-        let file = tvDir.appendingPathComponent("player.html")
-        guard let html = try? String(contentsOf: file, encoding: .utf8) else { return }
+        guard let file = Bundle.main.url(forResource: "player", withExtension: "html"),
+              let html = try? String(contentsOf: file, encoding: .utf8) else { return }
         webView.loadHTMLString(html, baseURL: URL(string: "https://localhost/"))
     }
 

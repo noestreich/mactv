@@ -15,6 +15,7 @@ mkdir -p "${BUNDLE}/MacOS" "${BUNDLE}/Resources"
 
 cp ".build/release/${APP}" "${BUNDLE}/MacOS/${APP}"
 cp "Resources/AppIcon.icns" "${BUNDLE}/Resources/AppIcon.icns"
+cp "../player.html"          "${BUNDLE}/Resources/player.html"
 
 cat > "${BUNDLE}/Info.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
