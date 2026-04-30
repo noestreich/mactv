@@ -50,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         statusItem.menu = menu
     }
 
-    // MARK: - Fenster + WebView
+    // MARK: - Panel + WebView
 
     private func createPanel() {
         let w: CGFloat = 640
@@ -66,19 +66,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         panel.level              = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isMovableByWindowBackground = true
-        panel.hidesOnDeactivate  = false   // nicht verstecken wenn Fokus wechselt
+        panel.hidesOnDeactivate  = false
         panel.appearance         = NSAppearance(named: .darkAqua)
         panel.backgroundColor    = .black
         panel.delegate           = self
 
-        // Mitte des Hauptbildschirms
         let sf = (NSScreen.main ?? NSScreen.screens[0]).visibleFrame
         panel.setFrameOrigin(NSPoint(
             x: sf.minX + (sf.width  - w) / 2,
             y: sf.minY + (sf.height - h) / 2
         ))
 
-        // WKWebView – Autoplay ohne User-Interaktion erlauben
         let config = WKWebViewConfiguration()
         config.mediaTypesRequiringUserActionForPlayback = []
 
@@ -93,33 +91,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         panel.makeKeyAndOrderFront(nil)
         panel.orderFrontRegardless()
 
-        loadChannel(0)
+        loadPlayerPage()
     }
 
-    // MARK: - Sender laden
+    // MARK: - Seite laden
+
+    // HTML als String mit HTTPS-BaseURL laden – das erlaubt Cross-Origin-Requests
+    // aus dem WKWebView heraus (hls.js, Stream-CDNs, etc.)
+    private func loadPlayerPage() {
+        let file = tvDir.appendingPathComponent("player.html")
+        guard let html = try? String(contentsOf: file, encoding: .utf8) else { return }
+        webView.loadHTMLString(html, baseURL: URL(string: "https://localhost/"))
+    }
+
+    // MARK: - Sender wechseln
 
     func loadChannel(_ index: Int) {
         currentIndex = ((index % allChannels.count) + allChannels.count) % allChannels.count
         let ch = allChannels[currentIndex]
         panel.title = "\(currentIndex + 1)  \(ch.name)"
 
-        if pageReady {
-            // Seite bereits geladen → Stream via JavaScript wechseln (kein Reload)
-            webView.evaluateJavaScript("zapTo(\(currentIndex))") { _, _ in }
-        } else {
-            // Erstmalig laden
-            let playerFile = tvDir.appendingPathComponent("player.html")
-            var comps = URLComponents(url: playerFile, resolvingAgainstBaseURL: false)!
-            comps.queryItems = [URLQueryItem(name: "stream", value: ch.url)]
-            if let url = comps.url {
-                webView.loadFileURL(url, allowingReadAccessTo: tvDir)
-            }
-        }
+        guard pageReady else { return }
+        tuneWebView(to: currentIndex)
     }
 
-    // Sobald player.html fertig geladen ist
+    private func tuneWebView(to index: Int) {
+        let ch = allChannels[index]
+
+        if ch.name == "ZDF" {
+            // ZDF über native URLSession laden (kein CORS), dann URL an JS übergeben
+            ZDFLoader.fetchHLSURL { [weak self] url in
+                guard let self else { return }
+                if let url {
+                    let safe = url.replacingOccurrences(of: "'", with: "\\'")
+                    self.webView.evaluateJavaScript("playUrl('\(safe)')") { _, _ in }
+                } else {
+                    // Fallback: direkte URL probieren
+                    self.webView.evaluateJavaScript("zapTo(\(index))") { _, _ in }
+                }
+            }
+        } else {
+            webView.evaluateJavaScript("zapTo(\(index))") { _, _ in }
+        }
+
+        // Sendername im Panel-Titel aktualisieren
+        webView.evaluateJavaScript("document.getElementById('channel-name').textContent = \(jsString(ch.name))") { _, _ in }
+    }
+
+    private func jsString(_ s: String) -> String {
+        "'\(s.replacingOccurrences(of: "'", with: "\\'"))'"
+    }
+
+    // Seite fertig geladen → initialen Sender starten
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         pageReady = true
+        tuneWebView(to: currentIndex)
     }
 
     // MARK: - Actions
@@ -135,10 +161,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     @objc private func menuTune(_ sender: NSMenuItem) {
         loadChannel(sender.tag)
-        if !panel.isVisible { panel.orderFrontRegardless() }
+        if !panel.isVisible {
+            NSApp.activate(ignoringOtherApps: true)
+            panel.makeKeyAndOrderFront(nil)
+        }
     }
 
-    // Schließen → nur ausblenden
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         panel.orderOut(nil)
         return false

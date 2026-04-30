@@ -297,7 +297,11 @@ function zapTo(idx) {
   document.title = names[idx] + " · MacTV";
   select.value = idx;
   history.replaceState(null, "", "player.html?stream=" + encodeURIComponent(sender[idx]));
-  playUrl(sender[idx]);
+  if (names[idx] === "ZDF") {
+    loadZdfViaApi();
+  } else {
+    playUrl(sender[idx]);
+  }
 }
 
 // ── Topbar Auto-Hide ──
@@ -337,10 +341,73 @@ document.addEventListener("keydown", e => {
 // ── Hint ausblenden ──
 setTimeout(() => hint.classList.add("gone"), 5000);
 
+// ── ZDF via API (wird nur im Browser benötigt; in der Mac-App übernimmt Swift) ──
+async function loadZdfViaApi() {
+  const PLAYER_ID   = "ngplayer_2_4";
+  const GRAPHQL_URL = "https://api.zdf.de/graphql";
+  const API_TOKEN   = "ahBaeMeekaiy5ohsai4bee4ki6Oopoi5quailieb";
+  const canonical   = "zdf-live-beitrag-100";
+
+  try {
+    const gqlResp = await fetch(GRAPHQL_URL, {
+      method: "POST",
+      headers: {
+        "api-auth":     "Bearer " + API_TOKEN,
+        "content-type": "application/json",
+        "origin":       "https://www.zdf.de",
+        "referer":      "https://www.zdf.de/"
+      },
+      body: JSON.stringify({
+        operationName: "VideoByCanonical",
+        query: "query VideoByCanonical($canonical:String!){videoByCanonical(canonical:$canonical){currentMedia{nodes{ptmdTemplate id}}}}",
+        variables: { canonical }
+      })
+    });
+    const gqlJson      = await gqlResp.json();
+    const ptmdTemplate = gqlJson?.data?.videoByCanonical?.currentMedia?.nodes?.[0]?.ptmdTemplate;
+    if (!ptmdTemplate) throw new Error("kein ptmdTemplate");
+
+    const streamUrl  = "https://api.zdf.de" + ptmdTemplate.replace("{playerId}", PLAYER_ID).trim();
+    const metaResp   = await fetch(streamUrl, {
+      headers: {
+        "Accept":    "application/vnd.de.zdf.v1.0+json;charset=UTF-8",
+        "Api-Auth":  "Bearer " + API_TOKEN,
+        "Referer":   "https://www.zdf.de/"
+      }
+    });
+    const metaJson = await metaResp.json();
+
+    let hlsUrl = null;
+    outer:
+    for (const prio of metaJson.priorityList || []) {
+      for (const form of prio.formitaeten || []) {
+        if (form.type === "h264_aac_ts_http_m3u8_http") {
+          for (const qual of form.qualities || []) {
+            if (qual.quality === "auto" && qual.audio?.tracks?.[0]?.uri) {
+              hlsUrl = qual.audio.tracks[0].uri;
+              break outer;
+            }
+          }
+        }
+      }
+    }
+    if (!hlsUrl) throw new Error("keine HLS-URL");
+    playUrl(hlsUrl);
+  } catch (err) {
+    console.warn("ZDF API fehlgeschlagen, probiere direkte URL:", err);
+    playUrl(sender[currentIndex]);
+  }
+}
+
 // ── Start ──
 document.getElementById("channel-name").textContent = names[currentIndex] || "Sender";
 document.title = (names[currentIndex] || "Sender") + " · MacTV";
-playUrl(initialStream || sender[currentIndex]);
+
+if (names[currentIndex] === "ZDF") {
+  loadZdfViaApi();
+} else {
+  playUrl(initialStream || sender[currentIndex]);
+}
 </script>
 
 </body>
