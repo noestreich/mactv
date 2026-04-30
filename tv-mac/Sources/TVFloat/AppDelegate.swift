@@ -1,10 +1,10 @@
 import AppKit
-import AVKit
+import AVFoundation
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private var panel:        NSPanel!
-    private var playerView:   AVPlayerView!
+    private var playerLayer:  AVPlayerLayer!
     private var player:       AVPlayer!
     private var statusItem:   NSStatusItem!
     private var currentIndex  = 0
@@ -64,22 +64,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isMovableByWindowBackground = true
         panel.delegate           = self
-        panel.center()
 
-        player     = AVPlayer()
-        playerView = AVPlayerView(frame: NSRect(origin: .zero, size: rect.size))
-        playerView.player             = player
-        playerView.autoresizingMask   = [.width, .height]
-        playerView.controlsStyle      = .floating  // erscheinen beim Hover
+        // Explizit auf Hauptbildschirm zentrieren
+        if let screen = NSScreen.main {
+            let sf = screen.visibleFrame
+            let origin = NSPoint(
+                x: sf.minX + (sf.width  - rect.width)  / 2,
+                y: sf.minY + (sf.height - rect.height) / 2
+            )
+            panel.setFrameOrigin(origin)
+        }
 
-        panel.contentView?.addSubview(playerView)
+        // AVPlayerLayer direkt ins contentView – zuverlässiger als AVPlayerView
+        player = AVPlayer()
 
-        // Tastatur-Events abfangen, solange das Panel Key-Window ist
+        let cv = panel.contentView!
+        cv.wantsLayer = true
+        cv.layer?.backgroundColor = NSColor.black.cgColor
+
+        playerLayer = AVPlayerLayer(player: player)
+        playerLayer.frame             = cv.bounds
+        playerLayer.autoresizingMask  = [.layerWidthSizable, .layerHeightSizable]
+        playerLayer.videoGravity      = .resizeAspect
+        cv.layer?.addSublayer(playerLayer)
+
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             self?.handleKey(event) ?? event
         }
 
         panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     // MARK: - Sender wechseln
@@ -116,7 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case "m":
             player.isMuted.toggle();              return nil
         case "f":
-            panel.toggleFullScreen(nil);          return nil
+            panel.toggleFullScreen(nil); return nil
         default:
             return event
         }
