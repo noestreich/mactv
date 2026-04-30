@@ -14,9 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     // MARK: - Launch
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.activate(ignoringOtherApps: true)
         setupMenuBar()
         createPanel()
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     // MARK: - Menu-Bar
@@ -89,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         webView.navigationDelegate = self
 
         panel.contentView?.addSubview(webView)
+        panel.makeKeyAndOrderFront(nil)
         panel.orderFrontRegardless()
 
         loadChannel(0)
