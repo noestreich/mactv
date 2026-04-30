@@ -239,7 +239,7 @@ const names = [
 
 let currentIndex  = Math.max(sender.indexOf(initialStream), 0);
 let activeHls     = null;
-let subtitlesOn   = false;
+let subtitlesOn   = true;
 const subBtn      = document.getElementById("sub-btn");
 const toast       = document.getElementById("toast");
 let toastTimer;
@@ -325,6 +325,7 @@ function zapTo(idx) {
   document.getElementById("channel-name").textContent = names[idx];
   document.title = names[idx] + " · MacTV";
   select.value = idx;
+  window.webkit?.messageHandlers?.channelChanged?.postMessage(idx);
   history.replaceState(null, "", "player.html?stream=" + encodeURIComponent(sender[idx]));
   if (names[idx] === "ZDF") {
     loadZdfViaApi();
@@ -364,7 +365,7 @@ function toggleSubtitles() {
   showToast(subtitlesOn ? "Untertitel ein" : "Untertitel aus");
 }
 
-subBtn.style.opacity = "0.45";
+subBtn.style.opacity = "1";
 subBtn.addEventListener("click", toggleSubtitles);
 
 // ── Topbar Auto-Hide ──

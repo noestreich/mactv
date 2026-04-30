@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import WebKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKScriptMessageHandler {
 
     private var panel:           NSPanel!
     private var webView:         WKWebView!
@@ -152,6 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
         let config = WKWebViewConfiguration()
         config.mediaTypesRequiringUserActionForPlayback = []
+        config.userContentController.add(self, name: "channelChanged")
 
         webView = WKWebView(
             frame: NSRect(origin: .zero, size: NSSize(width: w, height: h)),
@@ -211,6 +212,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         let ch = channelStore.channels[currentIndex]
         panel.title    = "MacTV"
         panel.subtitle = "\(currentIndex + 1)  \(ch.name)"
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "channelChanged", let idx = message.body as? Int else { return }
+        currentIndex = idx
+        updatePanelTitle()
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
