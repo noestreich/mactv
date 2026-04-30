@@ -14,6 +14,7 @@ rm -rf "${APP}.app"
 mkdir -p "${BUNDLE}/MacOS" "${BUNDLE}/Resources"
 
 cp ".build/release/${APP}" "${BUNDLE}/MacOS/${APP}"
+cp "Resources/AppIcon.icns" "${BUNDLE}/Resources/AppIcon.icns"
 
 cat > "${BUNDLE}/Info.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -26,6 +27,7 @@ cat > "${BUNDLE}/Info.plist" << 'PLIST'
   <key>CFBundleIdentifier</key>    <string>local.mactv</string>
   <key>CFBundleVersion</key>       <string>1.0</string>
   <key>CFBundleShortVersionString</key> <string>1.0</string>
+  <key>CFBundleIconFile</key>       <string>AppIcon</string>
   <key>CFBundleExecutable</key>    <string>TVFloat</string>
   <key>CFBundlePackageType</key>   <string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
