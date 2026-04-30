@@ -1,14 +1,17 @@
 import AppKit
+import SwiftUI
 import WebKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate {
 
-    private var panel:       NSPanel!
-    private var webView:     WKWebView!
-    private var statusItem:  NSStatusItem!
-    private var currentIndex = 0
-    private var pageReady    = false
+    private var panel:           NSPanel!
+    private var webView:         WKWebView!
+    private var statusItem:      NSStatusItem!
+    private var settingsWindow:  NSWindow?
+    private var currentIndex     = 0
+    private var pageReady        = false
 
+    private let channelStore = ChannelStore()
     private let tvDir = URL(fileURLWithPath: "/Users/nicolasoestreich/tv")
 
     // MARK: - Launch
@@ -24,15 +27,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "📺"
+        rebuildMenu()
+    }
 
+    private func rebuildMenu() {
         let menu = NSMenu()
-        let show = NSMenuItem(title: "Einblenden / Ausblenden",
-                              action: #selector(togglePanel), keyEquivalent: "")
-        show.target = self
-        menu.addItem(show)
+
+        // Einstellungen
+        let settings = NSMenuItem(title: "Einstellungen…",
+                                  action: #selector(openSettings),
+                                  keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
+
+        // Ein-/Ausblenden
+        let toggle = NSMenuItem(title: "Einblenden / Ausblenden",
+                                action: #selector(togglePanel),
+                                keyEquivalent: "")
+        toggle.target = self
+        menu.addItem(toggle)
         menu.addItem(.separator())
 
-        for (i, ch) in allChannels.prefix(9).enumerated() {
+        // Schnellzugriff erste 9 Sender
+        for (i, ch) in channelStore.channels.prefix(9).enumerated() {
             let item = NSMenuItem(title: "\(i + 1)  \(ch.name)",
                                   action: #selector(menuTune(_:)),
                                   keyEquivalent: "")
@@ -47,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
                               keyEquivalent: "q")
         quit.target = NSApp
         menu.addItem(quit)
+
         statusItem.menu = menu
     }
 
@@ -94,10 +112,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         loadPlayerPage()
     }
 
-    // MARK: - Seite laden
-
-    // HTML als String mit HTTPS-BaseURL laden – das erlaubt Cross-Origin-Requests
-    // aus dem WKWebView heraus (hls.js, Stream-CDNs, etc.)
     private func loadPlayerPage() {
         let file = tvDir.appendingPathComponent("player.html")
         guard let html = try? String(contentsOf: file, encoding: .utf8) else { return }
@@ -107,26 +121,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     // MARK: - Sender wechseln
 
     func loadChannel(_ index: Int) {
-        currentIndex = ((index % allChannels.count) + allChannels.count) % allChannels.count
-        let ch = allChannels[currentIndex]
+        currentIndex = ((index % channelStore.channels.count) + channelStore.channels.count) % channelStore.channels.count
+        let ch = channelStore.channels[currentIndex]
         panel.title = "\(currentIndex + 1)  \(ch.name)"
-
         guard pageReady else { return }
         tuneWebView(to: currentIndex)
     }
 
     private func tuneWebView(to index: Int) {
-        let ch = allChannels[index]
+        guard index < channelStore.channels.count else { return }
+        let ch = channelStore.channels[index]
 
-        if ch.name == "ZDF" {
-            // ZDF über native URLSession laden (kein CORS), dann URL an JS übergeben
+        if ch.useZDFApi {
             ZDFLoader.fetchHLSURL { [weak self] url in
                 guard let self else { return }
                 if let url {
                     let safe = url.replacingOccurrences(of: "'", with: "\\'")
                     self.webView.evaluateJavaScript("playUrl('\(safe)')") { _, _ in }
                 } else {
-                    // Fallback: direkte URL probieren
                     self.webView.evaluateJavaScript("zapTo(\(index))") { _, _ in }
                 }
             }
@@ -134,18 +146,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             webView.evaluateJavaScript("zapTo(\(index))") { _, _ in }
         }
 
-        // Sendername im Panel-Titel aktualisieren
-        webView.evaluateJavaScript("document.getElementById('channel-name').textContent = \(jsString(ch.name))") { _, _ in }
+        let safeName = ch.name.replacingOccurrences(of: "'", with: "\\'")
+        webView.evaluateJavaScript("document.getElementById('channel-name').textContent='\(safeName)'") { _, _ in }
     }
 
-    private func jsString(_ s: String) -> String {
-        "'\(s.replacingOccurrences(of: "'", with: "\\'"))'"
-    }
-
-    // Seite fertig geladen → initialen Sender starten
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         pageReady = true
         tuneWebView(to: currentIndex)
+    }
+
+    // MARK: - Einstellungen
+
+    @objc private func openSettings() {
+        if let w = settingsWindow, w.isVisible {
+            w.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let view = SettingsView(store: channelStore) { [weak self] in
+            self?.rebuildMenu()
+            // Falls der aktuell gespielte Sender verschoben wurde → Index korrigieren
+            if let self, self.currentIndex >= self.channelStore.channels.count {
+                self.loadChannel(0)
+            }
+        }
+
+        let hosting = NSHostingController(rootView: view)
+        let window  = NSWindow(contentViewController: hosting)
+        window.title      = "Einstellungen"
+        window.styleMask  = [.titled, .closable, .resizable]
+        window.setContentSize(NSSize(width: 640, height: 440))
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        settingsWindow = window
     }
 
     // MARK: - Actions
@@ -168,7 +203,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        panel.orderOut(nil)
-        return false
+        if sender === panel { panel.orderOut(nil); return false }
+        return true
     }
 }
