@@ -66,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         panel.level              = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isMovableByWindowBackground = true
+        panel.hidesOnDeactivate  = false   // nicht verstecken wenn Fokus wechselt
         panel.appearance         = NSAppearance(named: .darkAqua)
         panel.backgroundColor    = .black
         panel.delegate           = self
@@ -124,8 +125,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     // MARK: - Actions
 
     @objc private func togglePanel() {
-        if panel.isVisible { panel.orderOut(nil) }
-        else               { panel.orderFrontRegardless() }
+        if panel.isVisible {
+            panel.orderOut(nil)
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+            panel.makeKeyAndOrderFront(nil)
+        }
     }
 
     @objc private func menuTune(_ sender: NSMenuItem) {
