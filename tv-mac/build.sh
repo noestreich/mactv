@@ -21,8 +21,9 @@ cat > "${BUNDLE}/Info.plist" << 'PLIST'
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key>          <string>TVFloat</string>
-  <key>CFBundleIdentifier</key>    <string>local.tvfloat</string>
+  <key>CFBundleName</key>          <string>MacTV</string>
+  <key>CFBundleDisplayName</key>   <string>MacTV</string>
+  <key>CFBundleIdentifier</key>    <string>local.mactv</string>
   <key>CFBundleVersion</key>       <string>1.0</string>
   <key>CFBundleShortVersionString</key> <string>1.0</string>
   <key>CFBundleExecutable</key>    <string>TVFloat</string>

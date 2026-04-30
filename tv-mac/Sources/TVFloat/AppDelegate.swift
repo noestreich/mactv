@@ -8,8 +8,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var webView:         WKWebView!
     private var statusItem:      NSStatusItem!
     private var settingsWindow:  NSWindow?
+    private var floatingItem:    NSMenuItem?
     private var currentIndex     = 0
     private var pageReady        = false
+    private var isFloating       = true
 
     private let channelStore = ChannelStore()
     private let tvDir = URL(fileURLWithPath: "/Users/nicolasoestreich/tv")
@@ -17,12 +19,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     // MARK: - Launch
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        setupMainMenu()
         setupMenuBar()
         createPanel()
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    // MARK: - Menu-Bar
+    // MARK: - Hauptmenü (⌘W, ⌘Q, ⌘,)
+
+    private func setupMainMenu() {
+        let main = NSMenu()
+
+        // App-Menü
+        let appItem = NSMenuItem()
+        main.addItem(appItem)
+        let appMenu = NSMenu(title: "MacTV")
+        appItem.submenu = appMenu
+        appMenu.addItem(withTitle: "Einstellungen…",
+                        action: #selector(openSettings),
+                        keyEquivalent: ",").target = self
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "MacTV beenden",
+                        action: #selector(NSApplication.terminate(_:)),
+                        keyEquivalent: "q")
+
+        // Ablage-Menü
+        let fileItem = NSMenuItem()
+        main.addItem(fileItem)
+        let fileMenu = NSMenu(title: "Ablage")
+        fileItem.submenu = fileMenu
+        fileMenu.addItem(withTitle: "Fenster ausblenden",
+                         action: #selector(NSWindow.performClose(_:)),
+                         keyEquivalent: "w")
+
+        NSApp.mainMenu = main
+    }
+
+    // MARK: - Menüleisten-Icon
 
     private func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -30,25 +63,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         rebuildMenu()
     }
 
-    private func rebuildMenu() {
+    func rebuildMenu() {
         let menu = NSMenu()
 
-        // Einstellungen
-        let settings = NSMenuItem(title: "Einstellungen…",
-                                  action: #selector(openSettings),
-                                  keyEquivalent: ",")
-        settings.target = self
-        menu.addItem(settings)
+        let settingsItem = NSMenuItem(title: "Einstellungen…",
+                                      action: #selector(openSettings),
+                                      keyEquivalent: "")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
 
-        // Ein-/Ausblenden
-        let toggle = NSMenuItem(title: "Einblenden / Ausblenden",
-                                action: #selector(togglePanel),
-                                keyEquivalent: "")
-        toggle.target = self
-        menu.addItem(toggle)
+        let toggleItem = NSMenuItem(title: "Einblenden / Ausblenden",
+                                    action: #selector(togglePanel),
+                                    keyEquivalent: "")
+        toggleItem.target = self
+        menu.addItem(toggleItem)
+
+        let fi = NSMenuItem(title: "Immer im Vordergrund",
+                            action: #selector(toggleFloating),
+                            keyEquivalent: "")
+        fi.target = self
+        fi.state  = isFloating ? .on : .off
+        menu.addItem(fi)
+        floatingItem = fi
+
         menu.addItem(.separator())
 
-        // Schnellzugriff erste 9 Sender
         for (i, ch) in channelStore.channels.prefix(9).enumerated() {
             let item = NSMenuItem(title: "\(i + 1)  \(ch.name)",
                                   action: #selector(menuTune(_:)),
@@ -61,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "Beenden",
                               action: #selector(NSApplication.terminate(_:)),
-                              keyEquivalent: "q")
+                              keyEquivalent: "")
         quit.target = NSApp
         menu.addItem(quit)
 
@@ -80,9 +119,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             backing:     .buffered,
             defer:       false
         )
-        panel.title              = "TVFloat"
+        panel.title              = "MacTV"
         panel.level              = .floating
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // .fullScreenPrimary erlaubt die grüne Vollbild-Taste
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenPrimary]
         panel.isMovableByWindowBackground = true
         panel.hidesOnDeactivate  = false
         panel.appearance         = NSAppearance(named: .darkAqua)
@@ -122,8 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     func loadChannel(_ index: Int) {
         currentIndex = ((index % channelStore.channels.count) + channelStore.channels.count) % channelStore.channels.count
-        let ch = channelStore.channels[currentIndex]
-        panel.title = "\(currentIndex + 1)  \(ch.name)"
+        updatePanelTitle()
         guard pageReady else { return }
         tuneWebView(to: currentIndex)
     }
@@ -147,11 +186,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
 
         let safeName = ch.name.replacingOccurrences(of: "'", with: "\\'")
-        webView.evaluateJavaScript("document.getElementById('channel-name').textContent='\(safeName)'") { _, _ in }
+        webView.evaluateJavaScript(
+            "document.getElementById('channel-name').textContent='\(safeName)'"
+        ) { _, _ in }
+    }
+
+    private func updatePanelTitle() {
+        guard currentIndex < channelStore.channels.count else { return }
+        let ch = channelStore.channels[currentIndex]
+        panel.title    = "MacTV"
+        panel.subtitle = "\(currentIndex + 1)  \(ch.name)"
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         pageReady = true
+        updatePanelTitle()
         tuneWebView(to: currentIndex)
     }
 
@@ -166,7 +215,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
         let view = SettingsView(store: channelStore) { [weak self] in
             self?.rebuildMenu()
-            // Falls der aktuell gespielte Sender verschoben wurde → Index korrigieren
             if let self, self.currentIndex >= self.channelStore.channels.count {
                 self.loadChannel(0)
             }
@@ -174,7 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
         let hosting = NSHostingController(rootView: view)
         let window  = NSWindow(contentViewController: hosting)
-        window.title      = "Einstellungen"
+        window.title      = "MacTV – Einstellungen"
         window.styleMask  = [.titled, .closable, .resizable]
         window.setContentSize(NSSize(width: 640, height: 440))
         window.center()
@@ -194,6 +242,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
+    @objc private func toggleFloating() {
+        isFloating.toggle()
+        panel.level = isFloating ? .floating : .normal
+        floatingItem?.state = isFloating ? .on : .off
+    }
+
     @objc private func menuTune(_ sender: NSMenuItem) {
         loadChannel(sender.tag)
         if !panel.isVisible {
@@ -202,6 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
+    // ⌘W → ausblenden statt schließen
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         if sender === panel { panel.orderOut(nil); return false }
         return true
