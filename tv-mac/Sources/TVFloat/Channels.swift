@@ -30,7 +30,7 @@ let defaultChannels: [Channel] = [
     Channel(name: "ARD Alpha",         url: "https://mcdn.br.de/br/fs/ard_alpha/hls/de/master.m3u8"),
     Channel(name: "KiKA",              url: "https://kikageohls.akamaized.net/hls/live/2022693/livetvkika_de/master.m3u8"),
     Channel(name: "Tagesschau24",      url: "https://tagesschau.akamaized.net/hls/live/2020115/tagesschau/tagesschau_1/master.m3u8"),
-    Channel(name: "BR Fernsehen",      url: "https://brcdn.vo.llnwd.net/br/fs/bfs_sued/hls/de/master.m3u8"),
+    Channel(name: "BR Fernsehen",      url: "https://mcdn.br.de/br/fs/bfs_sued/hls/de/master.m3u8"),
     Channel(name: "HR Fernsehen",      url: "https://hrhls.akamaized.net/hls/live/2024525/hrhls/master.m3u8"),
     Channel(name: "MDR Sachsen",       url: "https://mdrtvsnhls.akamaized.net/hls/live/2016928/mdrtvsn/master.m3u8"),
     Channel(name: "NDR NDS",           url: "https://mcdn.ndr.de/ndr/hls/ndr_fs/ndr_nds/master.m3u8"),

@@ -181,7 +181,6 @@
   <select id="channel-select"></select>
   <button class="btn" id="mute-btn" title="Ton an/aus (M)">🔊</button>
   <button class="btn" id="sub-btn" title="Untertitel an/aus (U)">UT</button>
-  <button class="btn" onclick="window.location.href='index.html'" title="Übersicht">⌂</button>
 </div>
 
 <!-- muted + playsinline = garantiertes Autoplay -->
@@ -199,7 +198,12 @@ const spinner       = document.getElementById("spinner");
 const unmuteOverlay = document.getElementById("unmute-overlay");
 const muteBtn       = document.getElementById("mute-btn");
 const hint          = document.getElementById("hint");
+const select        = document.getElementById("channel-select");
+const subBtn        = document.getElementById("sub-btn");
+const toast         = document.getElementById("toast");
 
+// Senderliste – wird in der Mac-App von Swift via setChannels() überschrieben.
+// Im Browser bleibt diese Hardcode-Liste als Fallback aktiv.
 const sender = [
   "https://daserste-live.ard-mcdn.de/daserste/live/hls/de/master.m3u8",
   "https://zdf-hls-18.akamaized.net/hls/live/2016501/de/high/master.m3u8",
@@ -237,15 +241,66 @@ const names = [
   "Deluxe Music","Deluxe Dance","Deluxe Rap","Schlager Deluxe"
 ];
 
-let currentIndex  = Math.max(sender.indexOf(initialStream), 0);
-let activeHls     = null;
-let subtitlesOn   = true;
-const subBtn      = document.getElementById("sub-btn");
-const toast       = document.getElementById("toast");
+let currentIndex = Math.max(sender.indexOf(initialStream), 0);
+let activeHls    = null;
+let subtitlesOn  = false;   // Standard: aus (wird von Swift via setSubtitles() gesetzt)
 let toastTimer;
 
-// Dropdown befüllen
-const select = document.getElementById("channel-select");
+// ── Senderliste dynamisch setzen (von Swift injiziert) ──────────────────────
+function setChannels(chNames, chUrls) {
+  // Arrays in-place ersetzen (kein let/const-Neuzuweisung nötig)
+  sender.length = 0; sender.push(...chUrls);
+  names.length  = 0; names.push(...chNames);
+  // Dropdown neu aufbauen
+  while (select.options.length > 0) select.remove(0);
+  chNames.forEach((name, idx) => {
+    const opt = document.createElement("option");
+    opt.value = idx;
+    opt.textContent = name;
+    if (idx === currentIndex) opt.selected = true;
+    select.appendChild(opt);
+  });
+}
+
+// ── WebView-UI synchronisieren ohne Wiedergabe auszulösen (von Swift) ───────
+function updateChannelUI(idx, name) {
+  currentIndex = idx;
+  document.getElementById("channel-name").textContent = name;
+  document.title = name + " · MacTV";
+  select.value = idx;
+}
+
+// ── Untertitel-State auf HLS + TextTracks anwenden ───────────────────────────
+function applySubtitleState() {
+  if (activeHls) {
+    if (subtitlesOn && activeHls.subtitleTracks.length > 0) {
+      activeHls.subtitleDisplay = true;
+      activeHls.subtitleTrack   = 0;
+    } else {
+      activeHls.subtitleDisplay = false;
+      activeHls.subtitleTrack   = -1;
+    }
+  }
+  for (const t of video.textTracks) {
+    t.mode = subtitlesOn ? "showing" : "disabled";
+  }
+}
+
+// ── Untertitel explizit setzen (von Swift nach Seitenload) ───────────────────
+function setSubtitles(on) {
+  subtitlesOn = on;
+  applySubtitleState();
+  subBtn.style.opacity = on ? "1" : "0.45";
+}
+
+// ── Stummschaltung explizit setzen (von Swift nach Seitenload) ───────────────
+function setMuted(on) {
+  video.muted = on;
+  muteBtn.textContent = on ? "🔇" : "🔊";
+  if (!on) unmuteOverlay.classList.add("gone");
+}
+
+// Dropdown befüllen (Browser-Initialisierung; in der Mac-App überschreibt setChannels())
 names.forEach((name, idx) => {
   const opt = document.createElement("option");
   opt.value = idx;
@@ -258,13 +313,11 @@ select.onchange = () => zapTo(parseInt(select.value, 10));
 document.getElementById("prev").onclick = () => zapTo(currentIndex - 1);
 document.getElementById("next").onclick = () => zapTo(currentIndex + 1);
 
-// ── Autoplay-Fix: immer muted starten, dann unmuten versuchen ──
+// ── Autoplay-Fix ─────────────────────────────────────────────────────────────
 function onPlaybackStarted() {
   spinner.classList.add("gone");
-  // Versuche lautlos abzuspielen und dann Ton zu aktivieren
   video.muted = false;
   if (video.muted) {
-    // Browser hat Unmute blockiert → Overlay zeigen
     showUnmute();
   } else {
     muteBtn.textContent = "🔊";
@@ -276,35 +329,49 @@ function showUnmute() {
   muteBtn.textContent = "🔇";
 }
 
+function notifyMuteChange(muted) {
+  window.webkit?.messageHandlers?.muteChanged?.postMessage(muted);
+}
+
 unmuteOverlay.addEventListener("click", () => {
   video.muted = false;
   unmuteOverlay.classList.add("gone");
   muteBtn.textContent = "🔊";
+  notifyMuteChange(false);
 });
 
 muteBtn.addEventListener("click", () => {
   video.muted = !video.muted;
   muteBtn.textContent = video.muted ? "🔇" : "🔊";
   if (!video.muted) unmuteOverlay.classList.add("gone");
+  notifyMuteChange(video.muted);
 });
 
-// ── HLS Player ──
+// ── HLS Player ───────────────────────────────────────────────────────────────
 function playUrl(url) {
   if (activeHls) { activeHls.destroy(); activeHls = null; }
   spinner.classList.remove("gone");
   unmuteOverlay.classList.add("gone");
-  video.muted = true; // sicherstellen für Autoplay
+  video.muted = true;
 
   if (Hls.isSupported()) {
-    const hls = new Hls({ lowLatencyMode: true });
+    // subtitleDisplay/subtitleTrack verhindern das automatische Aktivieren durch HLS.js
+    const hls = new Hls({
+      lowLatencyMode:  true,
+      subtitleDisplay: subtitlesOn,
+      subtitleTrack:   subtitlesOn ? 0 : -1
+    });
     activeHls = hls;
     hls.loadSource(url);
     hls.attachMedia(video);
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      applySubtitleState(); // State sofort nach Manifest-Parsing setzen
       video.play()
         .then(onPlaybackStarted)
         .catch(() => spinner.classList.add("gone"));
     });
+    // Subtitle-State erneut setzen wenn Tracks nachgeladen werden
+    hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, () => applySubtitleState());
     hls.on(Hls.Events.ERROR, (_, data) => {
       if (data.fatal) spinner.classList.add("gone");
     });
@@ -318,23 +385,32 @@ function playUrl(url) {
   }
 }
 
-// ── Zapping (ohne Seitenreload) ──
+// ── Zapping ──────────────────────────────────────────────────────────────────
+// In der Mac-App: sendet requestPlay an Swift → Swift löst URL auf (inkl. ZDF-API) und ruft playUrl().
+// Im Browser: spielt direkt und behandelt ZDF lokal via loadZdfViaApi().
 function zapTo(idx) {
+  if (sender.length === 0) return;
   idx = ((idx % sender.length) + sender.length) % sender.length;
   currentIndex = idx;
-  document.getElementById("channel-name").textContent = names[idx];
-  document.title = names[idx] + " · MacTV";
+  document.getElementById("channel-name").textContent = names[idx] || "";
+  document.title = (names[idx] || "Sender") + " · MacTV";
   select.value = idx;
-  window.webkit?.messageHandlers?.channelChanged?.postMessage(idx);
-  history.replaceState(null, "", "player.html?stream=" + encodeURIComponent(sender[idx]));
-  if (names[idx] === "ZDF") {
-    loadZdfViaApi();
+
+  if (window.webkit?.messageHandlers?.requestPlay) {
+    // Mac-App: Swift übernimmt URL-Auflösung und Wiedergabe
+    window.webkit.messageHandlers.requestPlay.postMessage(idx);
   } else {
-    playUrl(sender[idx]);
+    // Browser: lokal abspielen
+    history.replaceState(null, "", "player.html?stream=" + encodeURIComponent(sender[idx]));
+    if (names[idx] === "ZDF") {
+      loadZdfViaApi();
+    } else {
+      playUrl(sender[idx]);
+    }
   }
 }
 
-// ── Toast ──
+// ── Toast ────────────────────────────────────────────────────────────────────
 function showToast(msg) {
   clearTimeout(toastTimer);
   toast.textContent = msg;
@@ -342,33 +418,16 @@ function showToast(msg) {
   toastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
 }
 
-// ── Untertitel ──
+// ── Untertitel (Toggle für Button/Tastatur) ───────────────────────────────────
 function toggleSubtitles() {
-  subtitlesOn = !subtitlesOn;
-
-  // hls.js
-  if (activeHls) {
-    if (subtitlesOn && activeHls.subtitleTracks.length > 0) {
-      activeHls.subtitleDisplay = true;
-      activeHls.subtitleTrack   = 0;
-    } else {
-      activeHls.subtitleDisplay = false;
-      activeHls.subtitleTrack   = -1;
-    }
-  }
-  // native TextTracks (Safari / WebKit)
-  for (const t of video.textTracks) {
-    t.mode = subtitlesOn ? "showing" : "disabled";
-  }
-
-  subBtn.style.opacity = subtitlesOn ? "1" : "0.45";
+  setSubtitles(!subtitlesOn);
   showToast(subtitlesOn ? "Untertitel ein" : "Untertitel aus");
 }
 
-subBtn.style.opacity = "1";
+subBtn.style.opacity = subtitlesOn ? "1" : "0.45";
 subBtn.addEventListener("click", toggleSubtitles);
 
-// ── Topbar Auto-Hide ──
+// ── Topbar Auto-Hide ──────────────────────────────────────────────────────────
 let hideTimer;
 function revealTopbar() {
   topbar.classList.remove("hidden");
@@ -378,7 +437,7 @@ function revealTopbar() {
 document.addEventListener("mousemove", revealTopbar);
 revealTopbar();
 
-// ── Keyboard-Shortcuts ──
+// ── Keyboard-Shortcuts ────────────────────────────────────────────────────────
 document.addEventListener("keydown", e => {
   switch (e.key) {
     case "ArrowUp":
@@ -391,6 +450,7 @@ document.addEventListener("keydown", e => {
       video.muted = !video.muted;
       muteBtn.textContent = video.muted ? "🔇" : "🔊";
       if (!video.muted) unmuteOverlay.classList.add("gone");
+      notifyMuteChange(video.muted);
       break;
     case "u": case "U":
       toggleSubtitles(); break;
@@ -404,10 +464,10 @@ document.addEventListener("keydown", e => {
   }
 });
 
-// ── Hint ausblenden ──
+// ── Hint ausblenden ───────────────────────────────────────────────────────────
 setTimeout(() => hint.classList.add("gone"), 5000);
 
-// ── ZDF via API (wird nur im Browser benötigt; in der Mac-App übernimmt Swift) ──
+// ── ZDF via API (nur im Browser; Mac-App delegiert an Swift/ZDFLoader.swift) ──
 async function loadZdfViaApi() {
   const PLAYER_ID   = "ngplayer_2_4";
   const GRAPHQL_URL = "https://api.zdf.de/graphql";
@@ -465,14 +525,18 @@ async function loadZdfViaApi() {
   }
 }
 
-// ── Start ──
+// ── Start ─────────────────────────────────────────────────────────────────────
 document.getElementById("channel-name").textContent = names[currentIndex] || "Sender";
 document.title = (names[currentIndex] || "Sender") + " · MacTV";
 
-if (names[currentIndex] === "ZDF") {
-  loadZdfViaApi();
-} else {
-  playUrl(initialStream || sender[currentIndex]);
+// Im Browser sofort abspielen. In der Mac-App ruft Swift nach dem Laden
+// setChannels() + setSubtitles() + tuneWebView() auf.
+if (!window.webkit?.messageHandlers?.requestPlay) {
+  if (names[currentIndex] === "ZDF") {
+    loadZdfViaApi();
+  } else {
+    playUrl(initialStream || sender[currentIndex]);
+  }
 }
 </script>
 

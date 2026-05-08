@@ -25,7 +25,7 @@ cat > "${BUNDLE}/Info.plist" << 'PLIST'
 <dict>
   <key>CFBundleName</key>          <string>MacTV</string>
   <key>CFBundleDisplayName</key>   <string>MacTV</string>
-  <key>CFBundleIdentifier</key>    <string>local.mactv</string>
+  <key>CFBundleIdentifier</key>    <string>com.aketo.mactv</string>
   <key>CFBundleVersion</key>       <string>1.0</string>
   <key>CFBundleShortVersionString</key> <string>1.0</string>
   <key>CFBundleIconFile</key>       <string>AppIcon</string>
