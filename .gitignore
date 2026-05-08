@@ -1,2 +1,11 @@
+# Swift build artifacts
 tv-mac/.build/
+
+# App bundle (wird per Makefile gebaut)
 tv-mac/*.app/
+
+# Release-Archiv
+tv-mac/*.zip
+
+# macOS
+.DS_Store
