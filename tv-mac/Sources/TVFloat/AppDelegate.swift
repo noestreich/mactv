@@ -175,6 +175,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
         let config = WKWebViewConfiguration()
         config.mediaTypesRequiringUserActionForPlayback = []
+        // WebKit-Inspector für Debugging aktivieren (Rechtsklick → Untersuchen)
+        config.preferences.setValue(true, forKey: "developerExtrasEnabled")
         // requestPlay: WebView meldet Senderindex → Swift löst URL auf und spielt ab
         config.userContentController.add(self, name: "requestPlay")
         // muteChanged: WebView meldet Mute-State → Swift persistiert ihn
