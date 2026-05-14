@@ -354,6 +354,15 @@ function playUrl(url) {
   unmuteOverlay.classList.add("gone");
   video.muted = true;
 
+  // RTSP-Streams: direkt per nativer WebKit/AVFoundation-Wiedergabe abspielen.
+  // HLS.js versteht kein RTSP — AVFoundation auf macOS aber schon.
+  if (url.startsWith("rtsp://")) {
+    video.src = url;
+    video.addEventListener("canplay", onPlaybackStarted, { once: true });
+    video.play().catch(() => spinner.classList.add("gone"));
+    return;
+  }
+
   if (Hls.isSupported()) {
     // subtitleDisplay/subtitleTrack verhindern das automatische Aktivieren durch HLS.js
     const hls = new Hls({
