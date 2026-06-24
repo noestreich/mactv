@@ -16,6 +16,7 @@ A lightweight macOS menu bar app for watching live German TV streams. Floats abo
 - **Floating window** — stays on top of all other windows (toggleable)
 - **Keyboard control** — switch channels, volume, mute, subtitles, fullscreen without touching the mouse
 - **Program info banner** — channel number, name and the current show (title + airtime) appear for 3 s on every channel change (EPG via the open Zapp/MediathekView API; ARD & ZDF channels)
+- **EPG overview** — press `Tab` for a full list of all channels with their current show; navigate with arrows and switch with `Enter`
 - **Menu bar icon** — quick access to channels, show/hide, and settings
 - **Settings window** — add, remove, reorder channels with custom stream URLs
 - **ZDF API** — dynamic stream URL fetching for ZDF (no hardcoded URL)
@@ -26,7 +27,7 @@ A lightweight macOS menu bar app for watching live German TV streams. Floats abo
 | Key | Action |
 |-----|--------|
 | `←` / `→` | Previous / next channel |
-| `Tab` | Next channel (with program info) |
+| `Tab` | Open EPG overview of all channels (↑ ↓ select · ⏎ switch · Tab/Esc close) |
 | `↑` / `↓` | Volume up / down |
 | `Space` | Mute / unmute |
 | `1` – `9` | Jump to channel 1–9 |

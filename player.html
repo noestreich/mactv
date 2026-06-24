@@ -262,6 +262,74 @@
     transition: width 0.12s;
   }
   #volbar .vol-pct { color: #fff; font-size: 12px; font-weight: 600; min-width: 34px; text-align: right; }
+
+  /* ── EPG-Übersicht (alle Sender, via Tab) ── */
+  #epg {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    z-index: 400;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  #epg.show { opacity: 1; pointer-events: auto; }
+  #epg-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px 10px;
+    flex-shrink: 0;
+  }
+  #epg-title { color: #fff; font-size: 15px; font-weight: 700; }
+  #epg-hint { color: rgba(255,255,255,0.5); font-size: 11px; }
+  #epg-list { flex: 1; overflow-y: auto; padding: 0 10px 12px; }
+  .epg-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .epg-row:hover { background: rgba(255,255,255,0.08); }
+  .epg-row.sel { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.25); }
+  .epg-row.live .epg-num { background: #e23b3b; }
+  .epg-num {
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    background: rgba(255,255,255,0.18);
+    border-radius: 6px;
+    padding: 1px 7px;
+    flex-shrink: 0;
+    min-width: 26px;
+    text-align: center;
+  }
+  .epg-ch {
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    width: 150px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .epg-show {
+    color: rgba(255,255,255,0.85);
+    font-size: 13px;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .epg-show .epg-t { color: rgba(255,255,255,0.5); font-variant-numeric: tabular-nums; margin-right: 8px; }
 </style>
 </head>
 <body>
@@ -301,7 +369,15 @@
   <span class="vol-pct" id="vol-pct">100%</span>
 </div>
 
-<div id="hint">← → &nbsp;Sender &nbsp;·&nbsp; ↑ ↓ Lautstärke &nbsp;·&nbsp; Leertaste Ton &nbsp;·&nbsp; Tab Programminfo &nbsp;·&nbsp; U Untertitel &nbsp;·&nbsp; F Vollbild</div>
+<div id="epg">
+  <div id="epg-header">
+    <span id="epg-title">Programmübersicht</span>
+    <span id="epg-hint">↑ ↓ wählen &nbsp;·&nbsp; ⏎ umschalten &nbsp;·&nbsp; Tab / Esc schließen</span>
+  </div>
+  <div id="epg-list"></div>
+</div>
+
+<div id="hint">← → &nbsp;Sender &nbsp;·&nbsp; ↑ ↓ Lautstärke &nbsp;·&nbsp; Leertaste Ton &nbsp;·&nbsp; Tab EPG-Übersicht &nbsp;·&nbsp; U Untertitel &nbsp;·&nbsp; F Vollbild</div>
 
 <script>
 const params        = new URLSearchParams(window.location.search);
@@ -317,6 +393,8 @@ const subBtn        = document.getElementById("sub-btn");
 const toast         = document.getElementById("toast");
 const infobar       = document.getElementById("infobar");
 const volbar        = document.getElementById("volbar");
+const epgEl         = document.getElementById("epg");
+const epgList       = document.getElementById("epg-list");
 
 // Senderliste – wird in der Mac-App von Swift via setChannels() überschrieben.
 // Im Browser bleibt diese Hardcode-Liste als Fallback aktiv.
@@ -645,6 +723,86 @@ function showInfoBanner(idx) {
   });
 }
 
+// ── EPG-Übersicht aller Sender (Tab) ────────────────────────────────────────────
+let epgOpen = false;
+let epgSel  = 0;
+
+function buildEpgRows() {
+  epgList.innerHTML = "";
+  names.forEach((name, idx) => {
+    const row = document.createElement("div");
+    row.className = "epg-row" + (idx === currentIndex ? " live" : "");
+    const num  = document.createElement("span"); num.className = "epg-num";  num.textContent = idx + 1;
+    const ch   = document.createElement("span"); ch.className  = "epg-ch";   ch.textContent  = name;
+    const show = document.createElement("span"); show.className = "epg-show"; show.textContent = "…";
+    row.appendChild(num); row.appendChild(ch); row.appendChild(show);
+    row.addEventListener("click", () => { epgSel = idx; confirmEpgSelection(); });
+    epgList.appendChild(row);
+  });
+  highlightEpgSelection();
+  loadEpgShows();
+}
+
+function highlightEpgSelection() {
+  const rows = epgList.children;
+  for (let i = 0; i < rows.length; i++) rows[i].classList.toggle("sel", i === epgSel);
+  if (rows[epgSel]) rows[epgSel].scrollIntoView({ block: "nearest" });
+}
+
+// Lädt für jeden Sender die aktuelle Sendung (nutzt Cache + nativen/Browser-Fetch).
+function loadEpgShows() {
+  const rows = epgList.children;
+  names.forEach((name, idx) => {
+    const cell = rows[idx] && rows[idx].querySelector(".epg-show");
+    if (!cell) return;
+    const key = zappKeyFor(name);
+    if (!key) { cell.textContent = "—"; return; }
+    fetchEpg(key).then(show => {
+      if (!epgOpen || !cell.isConnected) return;
+      if (!show) { cell.textContent = "—"; return; }
+      cell.innerHTML = "";
+      const start = fmtTime(show.startTime), end = fmtTime(show.endTime);
+      const time  = start ? (end ? start + "–" + end : start) : "";
+      if (time) {
+        const t = document.createElement("span"); t.className = "epg-t"; t.textContent = time;
+        cell.appendChild(t);
+      }
+      cell.appendChild(document.createTextNode(show.title || ""));
+    });
+  });
+}
+
+function openEpg() {
+  if (sender.length === 0) return;
+  epgOpen = true;
+  epgSel  = currentIndex;
+  buildEpgRows();
+  epgEl.classList.add("show");
+}
+
+function closeEpg() {
+  epgOpen = false;
+  epgEl.classList.remove("show");
+}
+
+function toggleEpg() { epgOpen ? closeEpg() : openEpg(); }
+
+function moveEpgSel(delta) {
+  const n = names.length;
+  if (!n) return;
+  epgSel = (((epgSel + delta) % n) + n) % n;
+  highlightEpgSelection();
+}
+
+function confirmEpgSelection() {
+  const idx = epgSel;
+  closeEpg();
+  zapTo(idx);
+}
+
+// Klick auf den dunklen Hintergrund schließt die Übersicht
+epgEl.addEventListener("click", e => { if (e.target === epgEl) closeEpg(); });
+
 // ── Lautstärke ─────────────────────────────────────────────────────────────────
 let volTimer;
 function showVolume() {
@@ -704,6 +862,18 @@ document.addEventListener("keydown", e => {
   const tag = (e.target && e.target.tagName) || "";
   if (tag === "SELECT" || tag === "INPUT" || tag === "TEXTAREA") return;
 
+  // Bei geöffneter EPG-Übersicht: Navigation im Overlay
+  if (epgOpen) {
+    switch (e.key) {
+      case "ArrowUp":   e.preventDefault(); moveEpgSel(-1); return;
+      case "ArrowDown": e.preventDefault(); moveEpgSel(+1); return;
+      case "Enter":     e.preventDefault(); confirmEpgSelection(); return;
+      case "Tab":
+      case "Escape":    e.preventDefault(); closeEpg(); return;
+      default:          return; // sonstige Tasten ignorieren solange offen
+    }
+  }
+
   switch (e.key) {
     // Pfeile rauf/runter → Lautstärke
     case "ArrowUp":
@@ -715,9 +885,9 @@ document.addEventListener("keydown", e => {
       e.preventDefault(); zapTo(currentIndex + 1); break;
     case "ArrowLeft":
       e.preventDefault(); zapTo(currentIndex - 1); break;
-    // Tab → nächster Sender mit Programminfo
+    // Tab → EPG-Übersicht aller Sender öffnen/schließen
     case "Tab":
-      e.preventDefault(); zapTo(currentIndex + 1); break;
+      e.preventDefault(); toggleEpg(); break;
     // Leertaste → Ton an/aus (preventDefault verhindert Video-Pause/Scroll)
     case " ": case "Spacebar":
       e.preventDefault(); toggleMute(); break;
