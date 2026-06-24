@@ -2,6 +2,10 @@
 
 A lightweight macOS menu bar app for watching live German TV streams. Floats above all other windows — perfect as a small companion while working.
 
+## Download
+
+Grab the latest build (**v1.7.1**) from the [Releases](https://github.com/ty-art-ty/mactv/releases/latest) page: download `MacTV-1.7.1.zip`, unzip it, and move `TVFloat.app` to your Applications folder. The app is ad-hoc signed, so on first launch right-click it and choose **Open** to bypass Gatekeeper. Requires macOS 13+.
+
 ## Screenshots
 
 <img src="docs/screenshot-player.png" width="640" alt="MacTV Player">
