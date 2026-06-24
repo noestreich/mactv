@@ -439,6 +439,10 @@ let currentIndex = Math.max(sender.indexOf(initialStream), 0);
 let activeHls    = null;
 let subtitlesOn  = false;   // Standard: aus (wird von Swift via setSubtitles() gesetzt)
 let toastTimer;
+// Vom Nutzer gewünschter Ton-Zustand – bleibt über Kanalwechsel hinweg erhalten.
+// (Während des Ladens wird zwar kurz stummgeschaltet, danach wird dieser Zustand wiederhergestellt.)
+let desiredMuted  = false;
+let desiredVolume = 1;
 
 // ── Senderliste dynamisch setzen (von Swift injiziert) ──────────────────────
 function setChannels(chNames, chUrls) {
@@ -490,6 +494,7 @@ function setSubtitles(on) {
 
 // ── Stummschaltung explizit setzen (von Swift nach Seitenload) ───────────────
 function setMuted(on) {
+  desiredMuted = on;
   video.muted = on;
   muteBtn.textContent = on ? "🔇" : "🔊";
   if (!on) unmuteOverlay.classList.add("gone");
@@ -511,12 +516,11 @@ document.getElementById("next").onclick = () => zapTo(currentIndex + 1);
 // ── Autoplay-Fix ─────────────────────────────────────────────────────────────
 function onPlaybackStarted() {
   spinner.classList.add("gone");
-  video.muted = false;
-  if (video.muted) {
-    showUnmute();
-  } else {
-    muteBtn.textContent = "🔊";
-  }
+  // Lautstärke und Mute-Zustand des Nutzers über den Kanalwechsel hinweg wiederherstellen
+  video.volume = desiredVolume;
+  video.muted  = desiredMuted;
+  muteBtn.textContent = video.muted ? "🔇" : "🔊";
+  if (!video.muted) unmuteOverlay.classList.add("gone");
 }
 
 function showUnmute() {
@@ -529,6 +533,7 @@ function notifyMuteChange(muted) {
 }
 
 unmuteOverlay.addEventListener("click", () => {
+  desiredMuted = false;
   video.muted = false;
   unmuteOverlay.classList.add("gone");
   muteBtn.textContent = "🔊";
@@ -819,18 +824,21 @@ function showVolume() {
 function changeVolume(delta) {
   // Beim Lauterstellen automatisch Stummschaltung aufheben
   if (delta > 0 && video.muted) {
+    desiredMuted = false;
     video.muted = false;
     muteBtn.textContent = "🔊";
     unmuteOverlay.classList.add("gone");
     notifyMuteChange(false);
   }
   video.volume = Math.min(1, Math.max(0, Math.round((video.volume + delta) * 100) / 100));
+  desiredVolume = video.volume;   // merken, damit die Lautstärke beim Umschalten erhalten bleibt
   showVolume();
 }
 
 // ── Stummschaltung (zentral) ───────────────────────────────────────────────────
 function toggleMute() {
   video.muted = !video.muted;
+  desiredMuted = video.muted;   // merken, damit der Mute-Zustand beim Umschalten erhalten bleibt
   muteBtn.textContent = video.muted ? "🔇" : "🔊";
   if (!video.muted) unmuteOverlay.classList.add("gone");
   notifyMuteChange(video.muted);
