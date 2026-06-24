@@ -164,6 +164,104 @@
     white-space: nowrap;
   }
   #toast.show { opacity: 1; }
+
+  /* ── Programminfo-Banner (beim Umschalten, 3 Sek) ── */
+  #infobar {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    max-width: min(70vw, 460px);
+    background: rgba(10,10,20,0.78);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px;
+    padding: 12px 16px;
+    z-index: 200;
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    transition: opacity 0.3s, transform 0.3s;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  #infobar.show { opacity: 1; transform: translateY(0); }
+  #infobar .ib-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 2px;
+  }
+  #infobar .ib-num {
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    background: rgba(255,255,255,0.16);
+    border-radius: 7px;
+    padding: 1px 8px;
+    flex-shrink: 0;
+  }
+  #infobar .ib-name {
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #infobar .ib-prog {
+    color: rgba(255,255,255,0.92);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.35;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  #infobar .ib-time {
+    color: rgba(255,255,255,0.55);
+    font-size: 12px;
+    font-weight: 500;
+    margin-top: 2px;
+  }
+
+  /* ── Lautstärke-Anzeige ── */
+  #volbar {
+    position: fixed;
+    left: 50%;
+    bottom: 32px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(10,10,20,0.78);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 30px;
+    padding: 9px 18px;
+    z-index: 300;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  #volbar.show { opacity: 1; }
+  #volbar .vol-icon { color: #fff; font-size: 15px; }
+  #volbar .vol-track {
+    width: 130px;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.2);
+    overflow: hidden;
+  }
+  #volbar .vol-fill {
+    height: 100%;
+    width: 0%;
+    background: #fff;
+    border-radius: 3px;
+    transition: width 0.12s;
+  }
+  #volbar .vol-pct { color: #fff; font-size: 12px; font-weight: 600; min-width: 34px; text-align: right; }
 </style>
 </head>
 <body>
@@ -187,7 +285,23 @@
 <video id="video" muted playsinline></video>
 
 <div id="toast"></div>
-<div id="hint">↑ ↓ &nbsp;Sender wechseln &nbsp;·&nbsp; M Ton &nbsp;·&nbsp; U Untertitel &nbsp;·&nbsp; F Vollbild</div>
+
+<div id="infobar">
+  <div class="ib-head">
+    <span class="ib-num" id="ib-num">1</span>
+    <span class="ib-name" id="ib-name">Sender</span>
+  </div>
+  <div class="ib-prog" id="ib-prog"></div>
+  <div class="ib-time" id="ib-time"></div>
+</div>
+
+<div id="volbar">
+  <span class="vol-icon" id="vol-icon">🔊</span>
+  <div class="vol-track"><div class="vol-fill" id="vol-fill"></div></div>
+  <span class="vol-pct" id="vol-pct">100%</span>
+</div>
+
+<div id="hint">← → &nbsp;Sender &nbsp;·&nbsp; ↑ ↓ Lautstärke &nbsp;·&nbsp; Leertaste Ton &nbsp;·&nbsp; Tab Programminfo &nbsp;·&nbsp; U Untertitel &nbsp;·&nbsp; F Vollbild</div>
 
 <script>
 const params        = new URLSearchParams(window.location.search);
@@ -201,6 +315,8 @@ const hint          = document.getElementById("hint");
 const select        = document.getElementById("channel-select");
 const subBtn        = document.getElementById("sub-btn");
 const toast         = document.getElementById("toast");
+const infobar       = document.getElementById("infobar");
+const volbar        = document.getElementById("volbar");
 
 // Senderliste – wird in der Mac-App von Swift via setChannels() überschrieben.
 // Im Browser bleibt diese Hardcode-Liste als Fallback aktiv.
@@ -268,6 +384,7 @@ function updateChannelUI(idx, name) {
   document.getElementById("channel-name").textContent = name;
   document.title = name + " · MacTV";
   select.value = idx;
+  showInfoBanner(idx);
 }
 
 // ── Untertitel-State auf HLS + TextTracks anwenden ───────────────────────────
@@ -340,12 +457,7 @@ unmuteOverlay.addEventListener("click", () => {
   notifyMuteChange(false);
 });
 
-muteBtn.addEventListener("click", () => {
-  video.muted = !video.muted;
-  muteBtn.textContent = video.muted ? "🔇" : "🔊";
-  if (!video.muted) unmuteOverlay.classList.add("gone");
-  notifyMuteChange(video.muted);
-});
+muteBtn.addEventListener("click", toggleMute);
 
 // ── HLS Player ───────────────────────────────────────────────────────────────
 function playUrl(url) {
@@ -395,6 +507,7 @@ function zapTo(idx) {
   document.getElementById("channel-name").textContent = names[idx] || "";
   document.title = (names[idx] || "Sender") + " · MacTV";
   select.value = idx;
+  showInfoBanner(idx);
 
   if (window.webkit?.messageHandlers?.requestPlay) {
     // Mac-App: Swift übernimmt URL-Auflösung und Wiedergabe
@@ -418,6 +531,154 @@ function showToast(msg) {
   toastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
 }
 
+// ── Programminfo / EPG ─────────────────────────────────────────────────────────
+// EPG-Daten kommen von der offenen Zapp/MediathekView-API (deckt ARD- & ZDF-Sender ab).
+// Sender ohne Mapping (z.B. Musiksender) zeigen nur das Sender-Banner ohne Sendung.
+const EPG_BASE = "https://api.zapp.mediathekview.de/v1/shows/";
+
+const zappMap = {
+  "das erste": "das_erste", "ard": "das_erste",
+  "zdf": "zdf",
+  "rbb berlin": "rbb_berlin", "rbb": "rbb_berlin",
+  "arte": "arte",
+  "one": "one",
+  "zdfneo": "zdf_neo",
+  "zdfinfo": "zdf_info",
+  "wdr": "wdr",
+  "phoenix": "phoenix",
+  "3sat": "dreisat",
+  "ard alpha": "ard_alpha", "ard-alpha": "ard_alpha",
+  "kika": "kika",
+  "tagesschau24": "tagesschau24", "tagesschau 24": "tagesschau24",
+  "br fernsehen": "br_sued", "br": "br_sued",
+  "hr fernsehen": "hr", "hr": "hr",
+  "mdr sachsen": "mdr_sachsen",
+  "ndr nds": "ndr_nds", "ndr niedersachsen": "ndr_nds",
+  "radio bremen tv": "rb", "radio bremen": "rb",
+  "sr fernsehen": "sr", "sr": "sr",
+  "swr bw": "swr_bw", "swr baden-württemberg": "swr_bw"
+};
+
+const epgCache = {}; // zappKey -> { ts, show }
+let epgReqId = 0;    // verhindert, dass veraltete Antworten ein neueres Banner überschreiben
+
+function zappKeyFor(name) {
+  return zappMap[(name || "").trim().toLowerCase()] || null;
+}
+
+// ── Nativer EPG-Abruf über Swift (umgeht CORS in der Mac-App) ────────────────
+// Swift ruft nach dem Abruf applyEpgResult(id, jsonString) auf.
+let nativeEpgSeq = 0;
+const nativeEpgResolvers = {};
+function fetchEpgNative(key) {
+  return new Promise(resolve => {
+    const id = ++nativeEpgSeq;
+    nativeEpgResolvers[id] = resolve;
+    window.webkit.messageHandlers.requestEpg.postMessage({ id, key });
+    setTimeout(() => {
+      if (nativeEpgResolvers[id]) { delete nativeEpgResolvers[id]; resolve(null); }
+    }, 6000);
+  });
+}
+function applyEpgResult(id, jsonStr) {
+  const resolve = nativeEpgResolvers[id];
+  if (!resolve) return;
+  delete nativeEpgResolvers[id];
+  try { resolve(jsonStr ? JSON.parse(jsonStr) : null); }
+  catch (e) { resolve(null); }
+}
+
+async function fetchEpg(key) {
+  const c = epgCache[key];
+  if (c && Date.now() - c.ts < 120000) return c.show; // 2 Min Cache
+  let show = null;
+  try {
+    let j;
+    if (window.webkit?.messageHandlers?.requestEpg) {
+      j = await fetchEpgNative(key);                 // Mac-App: nativ via Swift
+    } else {
+      const r = await fetch(EPG_BASE + key);         // Browser: direkter Fetch
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      j = await r.json();
+    }
+    show = (j && j.shows && j.shows[0]) || null;
+  } catch (e) {
+    console.warn("EPG fehlgeschlagen für", key, e);
+    show = null;
+  }
+  epgCache[key] = { ts: Date.now(), show };
+  return show;
+}
+
+function fmtTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d)) return "";
+  return d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+}
+
+let infoTimer;
+// Zeigt das Programminfo-Banner für 3 Sek. Lädt EPG asynchron nach.
+function showInfoBanner(idx) {
+  const name = names[idx] || "Sender";
+  document.getElementById("ib-num").textContent  = (idx + 1).toString();
+  document.getElementById("ib-name").textContent = name;
+  const progEl = document.getElementById("ib-prog");
+  const timeEl = document.getElementById("ib-time");
+  progEl.textContent = "";
+  timeEl.textContent = "";
+
+  infobar.classList.add("show");
+  clearTimeout(infoTimer);
+  infoTimer = setTimeout(() => infobar.classList.remove("show"), 3000);
+
+  const key = zappKeyFor(name);
+  const reqId = ++epgReqId;
+  if (!key) return; // kein EPG-Mapping → nur Sender-Banner
+
+  fetchEpg(key).then(show => {
+    // Nur anwenden, wenn dies noch die aktuell angezeigte Anfrage ist
+    if (reqId !== epgReqId || !show) return;
+    progEl.textContent = show.title + (show.subtitle ? " – " + show.subtitle : "");
+    const start = fmtTime(show.startTime), end = fmtTime(show.endTime);
+    timeEl.textContent = start ? (end ? `${start} – ${end}` : start) : "";
+  });
+}
+
+// ── Lautstärke ─────────────────────────────────────────────────────────────────
+let volTimer;
+function showVolume() {
+  const pct = Math.round(video.volume * 100);
+  const muted = video.muted || video.volume === 0;
+  document.getElementById("vol-fill").style.width = (muted ? 0 : pct) + "%";
+  document.getElementById("vol-pct").textContent  = muted ? "Stumm" : pct + "%";
+  document.getElementById("vol-icon").textContent = muted ? "🔇" : (pct === 0 ? "🔈" : "🔊");
+  volbar.classList.add("show");
+  clearTimeout(volTimer);
+  volTimer = setTimeout(() => volbar.classList.remove("show"), 1500);
+}
+
+function changeVolume(delta) {
+  // Beim Lauterstellen automatisch Stummschaltung aufheben
+  if (delta > 0 && video.muted) {
+    video.muted = false;
+    muteBtn.textContent = "🔊";
+    unmuteOverlay.classList.add("gone");
+    notifyMuteChange(false);
+  }
+  video.volume = Math.min(1, Math.max(0, Math.round((video.volume + delta) * 100) / 100));
+  showVolume();
+}
+
+// ── Stummschaltung (zentral) ───────────────────────────────────────────────────
+function toggleMute() {
+  video.muted = !video.muted;
+  muteBtn.textContent = video.muted ? "🔇" : "🔊";
+  if (!video.muted) unmuteOverlay.classList.add("gone");
+  notifyMuteChange(video.muted);
+  showVolume();
+}
+
 // ── Untertitel (Toggle für Button/Tastatur) ───────────────────────────────────
 function toggleSubtitles() {
   setSubtitles(!subtitlesOn);
@@ -439,19 +700,29 @@ revealTopbar();
 
 // ── Keyboard-Shortcuts ────────────────────────────────────────────────────────
 document.addEventListener("keydown", e => {
+  // Dropdown / Textfelder ihre eigenen Tasten (Pfeile, Leertaste) behalten lassen
+  const tag = (e.target && e.target.tagName) || "";
+  if (tag === "SELECT" || tag === "INPUT" || tag === "TEXTAREA") return;
+
   switch (e.key) {
+    // Pfeile rauf/runter → Lautstärke
     case "ArrowUp":
+      e.preventDefault(); changeVolume(+0.1); break;
+    case "ArrowDown":
+      e.preventDefault(); changeVolume(-0.1); break;
+    // Pfeile links/rechts → Sender wechseln
     case "ArrowRight":
       e.preventDefault(); zapTo(currentIndex + 1); break;
-    case "ArrowDown":
     case "ArrowLeft":
       e.preventDefault(); zapTo(currentIndex - 1); break;
+    // Tab → nächster Sender mit Programminfo
+    case "Tab":
+      e.preventDefault(); zapTo(currentIndex + 1); break;
+    // Leertaste → Ton an/aus (preventDefault verhindert Video-Pause/Scroll)
+    case " ": case "Spacebar":
+      e.preventDefault(); toggleMute(); break;
     case "m": case "M":
-      video.muted = !video.muted;
-      muteBtn.textContent = video.muted ? "🔇" : "🔊";
-      if (!video.muted) unmuteOverlay.classList.add("gone");
-      notifyMuteChange(video.muted);
-      break;
+      toggleMute(); break;
     case "u": case "U":
       toggleSubtitles(); break;
     case "f": case "F":

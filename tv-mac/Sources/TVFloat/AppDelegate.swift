@@ -181,6 +181,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         config.userContentController.add(self, name: "requestPlay")
         // muteChanged: WebView meldet Mute-State → Swift persistiert ihn
         config.userContentController.add(self, name: "muteChanged")
+        // requestEpg: WebView fordert Programminfo an → Swift lädt sie nativ (umgeht CORS)
+        config.userContentController.add(self, name: "requestEpg")
 
         webView = WKWebView(
             frame: NSRect(origin: .zero, size: NSSize(width: w, height: h)),
@@ -281,8 +283,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             guard let muted = message.body as? Bool else { return }
             isMuted = muted
             UserDefaults.standard.set(muted, forKey: "isMuted")
+        case "requestEpg":
+            guard let dict = message.body as? [String: Any],
+                  let id   = dict["id"]  as? Int,
+                  let key  = dict["key"] as? String else { return }
+            fetchEpg(id: id, key: key)
         default:
             break
+        }
+    }
+
+    // MARK: - Programminfo / EPG (nativ, ohne CORS-Beschränkung)
+
+    /// Lädt die aktuelle Sendung von der offenen Zapp/MediathekView-API und
+    /// reicht das JSON via applyEpgResult() zurück an das WebView.
+    private func fetchEpg(id: Int, key: String) {
+        let safeKey = key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? key
+        guard let url = URL(string: "https://api.zapp.mediathekview.de/v1/shows/\(safeKey)") else {
+            sendEpgResult(id: id, json: "")
+            return
+        }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 6
+        URLSession.shared.dataTask(with: req) { [weak self] data, _, _ in
+            let json = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            self?.sendEpgResult(id: id, json: json)
+        }.resume()
+    }
+
+    /// Bettet das EPG-JSON sicher (JSON-escaped) in den applyEpgResult-Aufruf ein.
+    private func sendEpgResult(id: Int, json: String) {
+        guard let arrData = try? JSONSerialization.data(withJSONObject: [json]),
+              let arrStr  = String(data: arrData, encoding: .utf8) else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.webView.evaluateJavaScript("applyEpgResult(\(id), \(arrStr)[0])") { _, _ in }
         }
     }
 
