@@ -330,6 +330,18 @@
     text-overflow: ellipsis;
   }
   .epg-show .epg-t { color: rgba(255,255,255,0.5); font-variant-numeric: tabular-nums; margin-right: 8px; }
+
+  /* ── Screenshot-Blitz ── */
+  #flash {
+    position: fixed;
+    inset: 0;
+    background: #fff;
+    z-index: 500;
+    opacity: 0;
+    pointer-events: none;
+  }
+  #flash.fire { animation: flashAnim 0.35s ease; }
+  @keyframes flashAnim { 0% { opacity: 0.85; } 100% { opacity: 0; } }
 </style>
 </head>
 <body>
@@ -377,7 +389,9 @@
   <div id="epg-list"></div>
 </div>
 
-<div id="hint">← → &nbsp;Sender &nbsp;·&nbsp; ↑ ↓ Lautstärke &nbsp;·&nbsp; Leertaste Ton &nbsp;·&nbsp; Tab EPG-Übersicht &nbsp;·&nbsp; U Untertitel &nbsp;·&nbsp; F Vollbild</div>
+<div id="flash"></div>
+
+<div id="hint">← → &nbsp;Sender &nbsp;·&nbsp; ↑ ↓ Lautstärke &nbsp;·&nbsp; Leertaste Screenshot &nbsp;·&nbsp; Tab EPG-Übersicht &nbsp;·&nbsp; M Ton &nbsp;·&nbsp; F Vollbild</div>
 
 <script>
 const params        = new URLSearchParams(window.location.search);
@@ -395,6 +409,7 @@ const infobar       = document.getElementById("infobar");
 const volbar        = document.getElementById("volbar");
 const epgEl         = document.getElementById("epg");
 const epgList       = document.getElementById("epg-list");
+const flash         = document.getElementById("flash");
 
 // Senderliste – wird in der Mac-App von Swift via setChannels() überschrieben.
 // Im Browser bleibt diese Hardcode-Liste als Fallback aktiv.
@@ -845,6 +860,55 @@ function toggleMute() {
   showVolume();
 }
 
+// ── Screenshot (Leertaste) ──────────────────────────────────────────────────────
+function sanitizeName(s) {
+  return (s || "Sender").replace(/[\/\\:*?"<>|]+/g, "-").trim() || "Sender";
+}
+
+// Kurzer weißer Blitz als visuelles Feedback
+function flashScreen() {
+  flash.classList.remove("fire");
+  void flash.offsetWidth; // Reflow erzwingen, damit die Animation neu startet
+  flash.classList.add("fire");
+}
+
+// Wird von Swift nach dem Speichern aufgerufen
+function screenshotSaved(ok, msg) {
+  showToast(ok ? "📸 " + (msg || "Screenshot gespeichert") : "⚠️ " + (msg || "Screenshot fehlgeschlagen"));
+}
+
+function takeScreenshot() {
+  if (!video.videoWidth || !video.videoHeight) { showToast("Kein Bild zum Aufnehmen"); return; }
+  const channel = names[currentIndex] || "Sender";
+
+  // Videobild abgreifen (ohne UI-Overlays). Bei geschütztem (getaintetem) Canvas → null.
+  let dataUrl = null;
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+    dataUrl = canvas.toDataURL("image/png");
+  } catch (e) {
+    dataUrl = null; // Fallback: Swift macht einen WebView-Snapshot
+  }
+
+  if (window.webkit?.messageHandlers?.saveScreenshot) {
+    // Mac-App: Swift speichert in <Ordner>/<Sender>/
+    flashScreen();
+    window.webkit.messageHandlers.saveScreenshot.postMessage({ data: dataUrl, channel });
+  } else if (dataUrl) {
+    // Browser: als Download anbieten
+    flashScreen();
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = sanitizeName(channel) + "_" + Date.now() + ".png";
+    a.click();
+  } else {
+    showToast("Screenshot nicht möglich (geschützter Stream)");
+  }
+}
+
 // ── Untertitel (Toggle für Button/Tastatur) ───────────────────────────────────
 function toggleSubtitles() {
   setSubtitles(!subtitlesOn);
@@ -896,9 +960,9 @@ document.addEventListener("keydown", e => {
     // Tab → EPG-Übersicht aller Sender öffnen/schließen
     case "Tab":
       e.preventDefault(); toggleEpg(); break;
-    // Leertaste → Ton an/aus (preventDefault verhindert Video-Pause/Scroll)
+    // Leertaste → Screenshot (preventDefault verhindert Video-Pause/Scroll)
     case " ": case "Spacebar":
-      e.preventDefault(); toggleMute(); break;
+      e.preventDefault(); takeScreenshot(); break;
     case "m": case "M":
       toggleMute(); break;
     case "u": case "U":

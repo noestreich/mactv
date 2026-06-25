@@ -183,6 +183,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         config.userContentController.add(self, name: "muteChanged")
         // requestEpg: WebView fordert Programminfo an → Swift lädt sie nativ (umgeht CORS)
         config.userContentController.add(self, name: "requestEpg")
+        // saveScreenshot: WebView schickt das aufgenommene Bild → Swift speichert es auf Platte
+        config.userContentController.add(self, name: "saveScreenshot")
 
         webView = WKWebView(
             frame: NSRect(origin: .zero, size: NSSize(width: w, height: h)),
@@ -288,8 +290,90 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
                   let id   = dict["id"]  as? Int,
                   let key  = dict["key"] as? String else { return }
             fetchEpg(id: id, key: key)
+        case "saveScreenshot":
+            guard let dict = message.body as? [String: Any] else { return }
+            let channel = (dict["channel"] as? String) ?? "Sender"
+            if let dataUrl = dict["data"] as? String, !dataUrl.isEmpty {
+                handleScreenshotDataURL(dataUrl, channel: channel)
+            } else {
+                // Canvas war geschützt → WebView-Snapshot als Fallback
+                snapshotWebView(channel: channel)
+            }
         default:
             break
+        }
+    }
+
+    // MARK: - Screenshots
+
+    /// Basis-Ordner für Screenshots: benutzerdefiniert (Einstellungen) oder ~/Pictures/MacTV.
+    static func screenshotBaseDir() -> URL {
+        if let saved = UserDefaults.standard.string(forKey: "screenshotFolder"), !saved.isEmpty {
+            return URL(fileURLWithPath: saved, isDirectory: true)
+        }
+        let pics = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Pictures")
+        return pics.appendingPathComponent("MacTV", isDirectory: true)
+    }
+
+    private func sanitizeFolderName(_ s: String) -> String {
+        let invalid = CharacterSet(charactersIn: "/\\:*?\"<>|")
+        let cleaned = s.components(separatedBy: invalid).joined(separator: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? "Sender" : cleaned
+    }
+
+    /// Dekodiert eine data:image/png;base64,… URL und speichert sie.
+    private func handleScreenshotDataURL(_ dataUrl: String, channel: String) {
+        guard let comma = dataUrl.firstIndex(of: ","),
+              let data  = Data(base64Encoded: String(dataUrl[dataUrl.index(after: comma)...])) else {
+            notifyScreenshot(false, "Ungültige Bilddaten")
+            return
+        }
+        writeScreenshot(data, channel: channel)
+    }
+
+    /// Fallback: rendert die WebView als PNG (inkl. eventueller Overlays).
+    private func snapshotWebView(channel: String) {
+        let cfg = WKSnapshotConfiguration()
+        webView.takeSnapshot(with: cfg) { [weak self] image, _ in
+            guard let self else { return }
+            guard let image,
+                  let tiff = image.tiffRepresentation,
+                  let rep  = NSBitmapImageRep(data: tiff),
+                  let png  = rep.representation(using: .png, properties: [:]) else {
+                self.notifyScreenshot(false, "Snapshot fehlgeschlagen")
+                return
+            }
+            self.writeScreenshot(png, channel: channel)
+        }
+    }
+
+    /// Schreibt die PNG-Daten nach <Basis-Ordner>/<Sender>/<Zeitstempel>.png (im Hintergrund).
+    private func writeScreenshot(_ png: Data, channel: String) {
+        let folder = sanitizeFolderName(channel)
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            let dir = Self.screenshotBaseDir().appendingPathComponent(folder, isDirectory: true)
+            do {
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let fmt = DateFormatter()
+                fmt.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+                let url = dir.appendingPathComponent("\(folder)_\(fmt.string(from: Date())).png")
+                try png.write(to: url)
+                self.notifyScreenshot(true, "\(folder) → \(url.lastPathComponent)")
+            } catch {
+                self.notifyScreenshot(false, error.localizedDescription)
+            }
+        }
+    }
+
+    /// Meldet das Ergebnis zurück an das WebView (Toast).
+    private func notifyScreenshot(_ ok: Bool, _ msg: String) {
+        let safe = msg.replacingOccurrences(of: "\\", with: "\\\\")
+                      .replacingOccurrences(of: "'",  with: "\\'")
+        DispatchQueue.main.async { [weak self] in
+            self?.webView.evaluateJavaScript("screenshotSaved(\(ok), '\(safe)')") { _, _ in }
         }
     }
 

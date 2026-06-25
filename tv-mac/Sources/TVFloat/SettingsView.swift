@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct SettingsView: View {
 
@@ -6,9 +7,17 @@ struct SettingsView: View {
     var onSave: () -> Void
 
     @State private var selection: UUID?
+    @State private var screenshotFolder: String =
+        UserDefaults.standard.string(forKey: "screenshotFolder") ?? ""
 
     private var selIdx: Int? {
         selection.flatMap { id in store.channels.firstIndex { $0.id == id } }
+    }
+
+    private var screenshotFolderDisplay: String {
+        screenshotFolder.isEmpty
+            ? "~/Pictures/MacTV  (Standard)"
+            : (screenshotFolder as NSString).abbreviatingWithTildeInPath
     }
 
     var body: some View {
@@ -91,6 +100,12 @@ struct SettingsView: View {
             shortcutsSection
                 .padding()
 
+            Divider()
+
+            // Screenshot-Ordner
+            screenshotSection
+                .padding()
+
             Spacer(minLength: 0)
             Divider()
 
@@ -148,14 +163,39 @@ struct SettingsView: View {
             Text("Tastaturkurzbefehle").font(.headline)
 
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 6) {
-                shortcutRow("↑  /  →",  "Nächster Sender")
-                shortcutRow("↓  /  ←",  "Vorheriger Sender")
+                shortcutRow("←  /  →",  "Sender wechseln")
+                shortcutRow("↑  /  ↓",  "Lautstärke")
+                shortcutRow("Leertaste", "Screenshot speichern")
+                shortcutRow("Tab",       "EPG-Übersicht aller Sender")
                 shortcutRow("1 – 9",     "Sender 1–9 direkt anwählen")
                 shortcutRow("0",         "Sender 10")
                 shortcutRow("M",         "Ton ein / aus")
                 shortcutRow("U",         "Untertitel ein / aus")
                 shortcutRow("F",         "Vollbild ein / aus")
             }
+        }
+    }
+
+    private var screenshotSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Screenshots").font(.headline)
+            HStack(spacing: 8) {
+                Image(systemName: "folder").foregroundColor(.secondary)
+                Text(screenshotFolderDisplay)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                if !screenshotFolder.isEmpty {
+                    Button("Standard") { setScreenshotFolder("") }
+                        .help("Auf ~/Pictures/MacTV zurücksetzen")
+                }
+                Button("Ordner wählen…") { chooseScreenshotFolder() }
+            }
+            Text("Die Leertaste speichert einen Screenshot unter „<Ordner>/<Sendername>/“.")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 
@@ -173,6 +213,28 @@ struct SettingsView: View {
     }
 
     // MARK: - Hilfsmethoden
+
+    private func setScreenshotFolder(_ path: String) {
+        screenshotFolder = path
+        if path.isEmpty {
+            UserDefaults.standard.removeObject(forKey: "screenshotFolder")
+        } else {
+            UserDefaults.standard.set(path, forKey: "screenshotFolder")
+        }
+    }
+
+    private func chooseScreenshotFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories    = true
+        panel.canChooseFiles          = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories    = true
+        panel.prompt                  = "Wählen"
+        panel.title                   = "Screenshot-Ordner wählen"
+        if panel.runModal() == .OK, let url = panel.url {
+            setScreenshotFolder(url.path)
+        }
+    }
 
     private func binding<T>(_ idx: Int, _ kp: WritableKeyPath<Channel, T>) -> Binding<T> {
         Binding(
