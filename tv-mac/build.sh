@@ -44,8 +44,16 @@ cat > "${BUNDLE}/Info.plist" << 'PLIST'
 </plist>
 PLIST
 
-echo "▶ Signiere (ad-hoc)…"
-codesign --force --deep --sign - "${APP}.app"
+# SIGN_IDENTITY gesetzt (z. B. via release.sh) → Developer-ID-Signatur mit
+# Hardened Runtime und Timestamp (Voraussetzung für Notarisierung),
+# sonst wie bisher ad-hoc für lokale Builds.
+if [[ -n "${SIGN_IDENTITY:-}" ]]; then
+  echo "▶ Signiere (${SIGN_IDENTITY})…"
+  codesign --force --deep --options runtime --timestamp --sign "${SIGN_IDENTITY}" "${APP}.app"
+else
+  echo "▶ Signiere (ad-hoc)…"
+  codesign --force --deep --sign - "${APP}.app"
+fi
 
 echo ""
 echo "✓ ${APP}.app bereit"
@@ -63,5 +71,9 @@ echo "  F         Vollbild"
 echo "  📺         Menüleisten-Icon → Ein-/Ausblenden"
 echo ""
 
-read -p "App jetzt starten? [j/N] " ans
-[[ "$ans" == [jJ] ]] && open "${APP}.app"
+# Nur im interaktiven Terminal nachfragen (nicht bei Aufruf aus release.sh)
+if [[ -t 0 ]]; then
+  read -p "App jetzt starten? [j/N] " ans
+  [[ "$ans" == [jJ] ]] && open "${APP}.app"
+fi
+exit 0
