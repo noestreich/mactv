@@ -4,7 +4,7 @@ A lightweight macOS menu bar app for watching live German TV streams. Floats abo
 
 ## Download
 
-Grab the latest build (**v1.7.1**) from the [Releases](https://github.com/noestreich/mactv/releases/latest) page: download `MacTV-1.7.1.zip`, unzip it, and move `TVFloat.app` to your Applications folder. The app is signed with a Developer ID certificate and notarized by Apple, so it launches without any Gatekeeper warning. Requires macOS 13+.
+Grab the latest build (**v1.7.1**) from the [Releases](https://github.com/noestreich/mactv/releases/latest) page: download `MacTV-1.7.1.zip`, unzip it, and move `MacTV.app` to your Applications folder. The app is signed with a Developer ID certificate and notarized by Apple, so it launches without any Gatekeeper warning. Requires macOS 13+.
 
 ## Screenshots
 

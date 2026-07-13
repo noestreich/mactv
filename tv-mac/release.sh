@@ -11,7 +11,7 @@
 # Aufruf: cd tv-mac && bash release.sh
 set -euo pipefail
 
-APP="TVFloat"
+APP="MacTV"
 IDENTITY="Developer ID Application: aketo GmbH (9H7F5NMT97)"
 PROFILE="${NOTARY_PROFILE:-mactv-notary}"
 

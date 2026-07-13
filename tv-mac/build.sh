@@ -3,17 +3,19 @@
 # Aufruf: cd tv-mac && bash build.sh
 set -euo pipefail
 
-APP="TVFloat"
+# Sichtbarer App-Name (Bundle) vs. interner Name des Swift-Targets
+APP="MacTV"
+BIN="TVFloat"
 BUNDLE="${APP}.app/Contents"
 
 echo "▶ Kompiliere…"
 swift build -c release 2>&1
 
 echo "▶ Erstelle App-Bundle…"
-rm -rf "${APP}.app"
+rm -rf "${APP}.app" "${BIN}.app"
 mkdir -p "${BUNDLE}/MacOS" "${BUNDLE}/Resources"
 
-cp ".build/release/${APP}" "${BUNDLE}/MacOS/${APP}"
+cp ".build/release/${BIN}" "${BUNDLE}/MacOS/${BIN}"
 cp "Resources/AppIcon.icns" "${BUNDLE}/Resources/AppIcon.icns"
 cp "../player.html"          "${BUNDLE}/Resources/player.html"
 
